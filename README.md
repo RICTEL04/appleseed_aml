@@ -16,6 +16,23 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Conectar Supabase
+
+1. Copia las variables de `.env.example` a tu `.env`.
+2. Reemplaza los valores por los de tu proyecto Supabase:
+	- `NEXT_PUBLIC_SUPABASE_URL`
+	- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+3. Usa el cliente desde `lib/supabase.ts`.
+
+Ejemplo de uso:
+
+```ts
+import { getSupabaseClient } from "@/lib/supabase";
+
+const supabase = getSupabaseClient();
+const { data, error } = await supabase.from("tu_tabla").select("*");
+```
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
