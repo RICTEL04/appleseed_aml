@@ -28,13 +28,14 @@ interface DonorData {
 }
 
 export function OrganizationProfile() {
-  const organizationId = localStorage.getItem('organization_id');
-  const organizationName = localStorage.getItem('organization_name');
+  const [organizationId, setOrganizationId] = useState<string>('');
+  const [organizationName, setOrganizationName] = useState<string>('');
+  const [origin, setOrigin] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   
   const [formData, setFormData] = useState<OrganizationData>({
-    legalName: organizationName || '',
+    legalName: '',
     rfc: '',
     bankName: '',
     accountNumber: '',
@@ -46,6 +47,21 @@ export function OrganizationProfile() {
     description: '',
     isComplete: false,
   });
+
+  useEffect(() => {
+    setOrganizationId(localStorage.getItem('organization_id') || '');
+    setOrganizationName(localStorage.getItem('organization_name') || '');
+    setOrigin(window.location.origin);
+  }, []);
+
+  useEffect(() => {
+    if (organizationName) {
+      setFormData((prev) => ({
+        ...prev,
+        legalName: prev.legalName || organizationName,
+      }));
+    }
+  }, [organizationName]);
 
   // Mock: Check if data exists in localStorage
   useEffect(() => {
@@ -69,7 +85,7 @@ export function OrganizationProfile() {
     setFormData(completeData);
   };
 
-  const donationLink = `${window.location.origin}/donate/${organizationId}`;
+  const donationLink = origin && organizationId ? `${origin}/donate/${organizationId}` : '';
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(donationLink);
