@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, Building2, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Building2, CheckCircle, AlertCircle } from 'lucide-react';
 
 export function RegisterOrganization() {
   const navigate = useNavigate();
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     type: '',
@@ -29,13 +31,37 @@ export function RegisterOrganization() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock submission - in real app would send to backend
-    setSubmitted(true);
-    setTimeout(() => {
-      navigate('/organizations');
-    }, 2000);
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch('/api/register-organization', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const responseData = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        setError(responseData.message ?? 'No se pudo registrar la organización.');
+        return;
+      }
+
+      setSubmitted(true);
+      setTimeout(() => {
+        navigate('/organizations');
+      }, 3000);
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : 'Error inesperado al registrar la organización.';
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -47,7 +73,7 @@ export function RegisterOrganization() {
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Organización Registrada!</h2>
           <p className="text-gray-600 mb-6">
-            La organización ha sido registrada exitosamente y está en proceso de verificación.
+            La organización fue registrada y se envió un correo para que configure su contraseña e inicie sesión.
           </p>
           <p className="text-sm text-gray-500">Redirigiendo...</p>
         </div>
@@ -73,6 +99,13 @@ export function RegisterOrganization() {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+        {error && (
+          <div className="mb-6 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        )}
+
         {/* Información General */}
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-6">
@@ -302,9 +335,10 @@ export function RegisterOrganization() {
           </button>
           <button
             type="submit"
+            disabled={isSubmitting}
             className="flex-1 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition shadow-lg shadow-emerald-600/30"
           >
-            Registrar Organización
+            {isSubmitting ? 'Registrando...' : 'Registrar Organización'}
           </button>
         </div>
       </form>

@@ -5,6 +5,7 @@ import { Outlet, useNavigate, Link, useLocation } from 'react-router';
 import { Shield, LayoutDashboard, Building2, LogOut, Menu } from 'lucide-react';
 import { useState } from 'react';
 import { NotificationPanel } from './NotificationPanel';
+import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 
 export function Layout() {
   const navigate = useNavigate();
@@ -22,7 +23,11 @@ export function Layout() {
     }
   }, [navigate]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (isSupabaseConfigured) {
+      await getSupabaseClient().auth.signOut();
+    }
+
     localStorage.removeItem('appleseed_auth');
     localStorage.removeItem('user_type');
     localStorage.removeItem('organization_id');
