@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, Link, useLocation } from 'react-router';
 import { Shield, LayoutDashboard, Bell, FileText, MessageSquare, LogOut, Menu, User } from 'lucide-react';
+import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 
 export function OrganizationLayout() {
   const navigate = useNavigate();
@@ -22,7 +23,11 @@ export function OrganizationLayout() {
     }
   }, [navigate]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (isSupabaseConfigured) {
+      await getSupabaseClient().auth.signOut();
+    }
+
     localStorage.removeItem('appleseed_auth');
     localStorage.removeItem('user_type');
     localStorage.removeItem('organization_id');
