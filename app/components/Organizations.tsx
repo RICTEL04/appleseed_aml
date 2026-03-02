@@ -3,9 +3,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Plus, Search, Filter, Building2, Phone, Mail, MapPin } from 'lucide-react';
+import { organizationRepository } from '@/lib/repositories/organization.repository';
+import { useOrganizations } from '../hooks/useOrganizations';
+import { OrganizationModel } from '@/lib/models/organization.model';
 
 interface Organization {
-  id: number;
+  id: string;
   name: string;
   type: string;
   contact: string;
@@ -16,65 +19,49 @@ interface Organization {
   registrationDate: string;
 }
 
-const mockOrganizations: Organization[] = [
-  {
-    id: 1,
-    name: 'Fundación Esperanza',
-    type: 'ONG',
-    contact: '+52 55 1234 5678',
-    email: 'contacto@esperanza.org',
-    location: 'Ciudad de México',
-    status: 'Verificada',
-    risk: 'Bajo',
-    registrationDate: '2024-01-15',
-  },
-  {
-    id: 2,
-    name: 'ONG Educación Global',
-    type: 'ONG',
-    contact: '+52 81 9876 5432',
-    email: 'info@educacionglobal.org',
-    location: 'Monterrey',
-    status: 'En revisión',
-    risk: 'Medio',
-    registrationDate: '2024-02-10',
-  },
-  {
-    id: 3,
-    name: 'Asociación Salud para Todos',
-    type: 'Asociación Civil',
-    contact: '+52 33 2468 1357',
-    email: 'contacto@saludtodos.org',
-    location: 'Guadalajara',
-    status: 'Verificada',
-    risk: 'Bajo',
-    registrationDate: '2024-01-28',
-  },
-  {
-    id: 4,
-    name: 'Centro de Apoyo Comunitario',
-    type: 'Centro de Ayuda',
-    contact: '+52 55 9753 8642',
-    email: 'apoyo@centroc.org',
-    location: 'Ciudad de México',
-    status: 'Verificada',
-    risk: 'Bajo',
-    registrationDate: '2024-02-05',
-  },
-  {
-    id: 5,
-    name: 'Fundación Desarrollo Sostenible',
-    type: 'Fundación',
-    contact: '+52 442 135 7924',
-    email: 'info@desarrollosostenible.org',
-    location: 'Querétaro',
-    status: 'Pendiente',
-    risk: 'Alto',
-    registrationDate: '2024-02-18',
-  },
-];
+
 
 export function Organizations() {
+
+  const { organizations, loading, error } = useOrganizations();
+
+  const mockOrganizations: Organization[] = (organizations || []).map((org: OrganizationModel) => ({
+    id: org.id_osc,
+    name: org.nombre_organizacion || '',
+    type: org.tipo || '',
+    contact: org.telefono ||'',
+    email: org.email || '',
+    location: org.direccion || '',
+    status: (org.estado_verificacion || 'Pendiente') as 'Verificada' | 'En revisión' | 'Pendiente',
+    risk: (org.riesgo || 'Bajo') as 'Bajo' | 'Medio' | 'Alto',
+    registrationDate: org.created_at || new Date().toISOString(),
+  }));
+
+  // const { organizations, loading, error } = useOrganizations();
+  // const [searchTerm, setSearchTerm] = useState('');
+  // const [filterStatus, setFilterStatus] = useState<string>('all');
+
+  // // Map organizations from DB to local Organization interface
+  // const mappedOrganizations: Organization[] = (organizations || []).map((org: any) => ({
+  //   id: org.id,
+  //   name: org.nombre_organizacion || org.name || '',
+  //   type: org.tipo_organizacion || org.type || '',
+  //   contact: org.telefono || org.contact || '',
+  //   email: org.email || '',
+  //   location: org.ubicacion || org.location || '',
+  //   status: org.estado || org.status || 'Pendiente',
+  //   risk: org.nivel_riesgo || org.risk || 'Bajo',
+  //   registrationDate: org.fecha_registro || org.registrationDate || new Date().toISOString(),
+  // }));
+
+  // const filteredOrganizations = mappedOrganizations.filter((org) => {
+  //   const matchesSearch = org.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //                        org.location.toLowerCase().includes(searchTerm.toLowerCase());
+  //   const matchesFilter = filterStatus === 'all' || org.status === filterStatus;
+  //   return matchesSearch && matchesFilter;
+  // });
+
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
@@ -84,6 +71,16 @@ export function Organizations() {
     const matchesFilter = filterStatus === 'all' || org.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
+
+  organizationRepository.getAll().then((organizations) => {
+    console.log('Fetched organizations:', organizations);
+    console.log(organizations[0].nombre_organizacion);
+  }).catch((error) => {
+    console.error('Error fetching organizations:', error);
+  });
+
+  if (loading) return <div className="text-center py-8">Cargando...</div>
+  if (error) return <div className="text-center py-8 text-red-500">{error}</div>
 
   return (
     <div className="space-y-6">
@@ -123,9 +120,9 @@ export function Organizations() {
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none appearance-none bg-white"
             >
               <option value="all">Todos los estados</option>
-              <option value="Verificada">Verificada</option>
-              <option value="En revisión">En revisión</option>
-              <option value="Pendiente">Pendiente</option>
+              <option value="verificada">Verificada</option>
+              <option value="en revisión">En revision</option>
+              <option value="pendiente">Pendiente</option>
             </select>
           </div>
         </div>
