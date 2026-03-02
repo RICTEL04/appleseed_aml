@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { RouterProvider } from 'react-router-dom';
+import { organizationRepository, OrganizationRepository } from '@/lib/repositories/organization.repository';
 
 function App() {
   const [router, setRouter] = useState<React.ComponentProps<typeof RouterProvider>['router'] | null>(null);
@@ -15,6 +16,8 @@ function App() {
   if (!router) {
     return null;
   }
+
+  
 
   return <RouterProvider router={router} />;
 }

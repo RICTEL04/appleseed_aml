@@ -13,6 +13,8 @@ export interface IOrganization {
   actividades_principales: string
   financiamiento: string
   created_at: string
+  riesgo: string
+  estado_verificacion: string
 }
 
 export class OrganizationModel implements IOrganization {
@@ -27,6 +29,8 @@ export class OrganizationModel implements IOrganization {
   actividades_principales: string
   financiamiento: string
   created_at: string
+  riesgo: string
+  estado_verificacion: string
 
   constructor(data: IOrganization) {
     this.id_osc = data.id_osc
@@ -40,6 +44,8 @@ export class OrganizationModel implements IOrganization {
     this.actividades_principales = data.actividades_principales
     this.financiamiento = data.financiamiento
     this.created_at = data.created_at
+    this.riesgo = data.riesgo
+    this.estado_verificacion = data.estado_verificacion
   }
 
   // Domain methods
