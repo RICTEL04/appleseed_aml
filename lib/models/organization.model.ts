@@ -15,6 +15,7 @@ export interface IOrganization {
   created_at: string
   riesgo: string
   estado_verificacion: string
+  id_direccion: string
 }
 
 export class OrganizationModel implements IOrganization {
@@ -31,6 +32,7 @@ export class OrganizationModel implements IOrganization {
   created_at: string
   riesgo: string
   estado_verificacion: string
+  id_direccion: string
 
   constructor(data: IOrganization) {
     this.id_osc = data.id_osc
@@ -46,6 +48,7 @@ export class OrganizationModel implements IOrganization {
     this.created_at = data.created_at
     this.riesgo = data.riesgo
     this.estado_verificacion = data.estado_verificacion
+    this.id_direccion = data.id_direccion
   }
 
   // Domain methods

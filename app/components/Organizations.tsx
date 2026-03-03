@@ -37,30 +37,6 @@ export function Organizations() {
     registrationDate: org.created_at || new Date().toISOString(),
   }));
 
-  // const { organizations, loading, error } = useOrganizations();
-  // const [searchTerm, setSearchTerm] = useState('');
-  // const [filterStatus, setFilterStatus] = useState<string>('all');
-
-  // // Map organizations from DB to local Organization interface
-  // const mappedOrganizations: Organization[] = (organizations || []).map((org: any) => ({
-  //   id: org.id,
-  //   name: org.nombre_organizacion || org.name || '',
-  //   type: org.tipo_organizacion || org.type || '',
-  //   contact: org.telefono || org.contact || '',
-  //   email: org.email || '',
-  //   location: org.ubicacion || org.location || '',
-  //   status: org.estado || org.status || 'Pendiente',
-  //   risk: org.nivel_riesgo || org.risk || 'Bajo',
-  //   registrationDate: org.fecha_registro || org.registrationDate || new Date().toISOString(),
-  // }));
-
-  // const filteredOrganizations = mappedOrganizations.filter((org) => {
-  //   const matchesSearch = org.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  //                        org.location.toLowerCase().includes(searchTerm.toLowerCase());
-  //   const matchesFilter = filterStatus === 'all' || org.status === filterStatus;
-  //   return matchesSearch && matchesFilter;
-  // });
-
   
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');

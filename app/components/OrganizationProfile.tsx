@@ -2,6 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { Building2, CreditCard, Share2, CheckCircle, Copy, Eye, X, ArrowRight, ArrowLeft, Heart, AlertCircle, Shield } from 'lucide-react';
+import {DirectionForm} from './DirectionForm';
+import { DirectionModel, IDirection } from '@/lib/models/direction.model';
+import { useOrganizations } from '../hooks/useOrganizations';
+import { OrganizationModel } from '@/lib/models/organization.model';
+import { v4 as uuidv4 } from 'uuid';
+import { useDirections } from '../hooks/useDirections';
 
 interface OrganizationData {
   legalName: string;
@@ -10,7 +16,7 @@ interface OrganizationData {
   accountNumber: string;
   clabe: string;
   accountHolder: string;
-  address: string;
+  direction?: Partial<IDirection>;
   phoneNumber: string;
   email: string;
   description: string;
@@ -28,12 +34,20 @@ interface DonorData {
 }
 
 export function OrganizationProfile() {
+  const { fetchOrganization } = useOrganizations();
+  const { fetchDirectionById, upsertDirection, loading: directionLoading } = useDirections();
+
   const [organizationId, setOrganizationId] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
   const [origin, setOrigin] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  
+  const [directionError, setDirectionError] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [data, setData] = useState<OrganizationModel | null>(null);
+  const [direction, setDirection] = useState<DirectionModel | null>(null);
+
   const [formData, setFormData] = useState<OrganizationData>({
     legalName: '',
     rfc: '',
@@ -41,12 +55,55 @@ export function OrganizationProfile() {
     accountNumber: '',
     clabe: '',
     accountHolder: '',
-    address: '',
+    direction: undefined,
     phoneNumber: '',
     email: '',
     description: '',
     isComplete: false,
   });
+
+  // Load organization data
+  useEffect(() => {
+    async function fetchData() {
+      const orgData = await fetchOrganization();
+      setData(orgData);
+    }
+    fetchData();
+  }, [fetchOrganization]);
+
+  // Load direction data
+  useEffect(() => {
+    if (!data?.id_direccion) return;
+    
+    async function fetchDirectionData() {
+      const dirData = await fetchDirectionById(data.id_direccion);
+      setDirection(dirData);
+    }
+    fetchDirectionData();
+  }, [data, fetchDirectionById]);
+
+  // Update form when data or direction changes
+  useEffect(() => {
+    if (data) {
+      setFormData((prev) => ({
+        ...prev,
+        legalName: data.nombre_organizacion,
+        rfc: data.rfc,
+        phoneNumber: data.telefono,
+        email: data.email,
+        description: data.actividades_principales,
+        direction: direction ? {
+          calle: direction.calle || '',
+          num_exterior: direction.num_exterior || '',
+          num_interior: direction.num_interior || null,
+          cp: direction.cp || '',
+          entidad_federativa: direction.entidad_federativa || '',
+          ciudad_alcaldia: direction.ciudad_alcaldia || '',
+          id_direccion: direction.id_direccion // Keep the ID for updates
+        } : prev.direction
+      }));
+    }
+  }, [data, direction]);
 
   useEffect(() => {
     setOrganizationId(localStorage.getItem('organization_id') || '');
@@ -63,14 +120,6 @@ export function OrganizationProfile() {
     }
   }, [organizationName]);
 
-  // Mock: Check if data exists in localStorage
-  useEffect(() => {
-    const savedData = localStorage.getItem(`org_profile_${organizationId}`);
-    if (savedData) {
-      setFormData(JSON.parse(savedData));
-    }
-  }, [organizationId]);
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({
       ...formData,
@@ -78,11 +127,85 @@ export function OrganizationProfile() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleDirectionChange = (directionData: Partial<IDirection>) => {
+    setFormData({
+      ...formData,
+      direction: directionData,
+    });
+
+    if (directionError) setDirectionError('');
+  };
+
+  const validateDirection = (direction?: Partial<IDirection>): boolean => {
+    if (!direction) return false;
+    
+    const required: (keyof IDirection)[] = [
+      'calle', 'num_exterior', 'cp', 
+      'entidad_federativa', 'ciudad_alcaldia'
+    ];
+    
+    for (const field of required) {
+      if (!direction[field] || direction[field]?.trim() === '') {
+        setDirectionError(`La dirección requiere ${field.replace('_', ' ')}`);
+        return false;
+      }
+    }
+    
+    if (direction.cp && !/^\d{5}$/.test(direction.cp)) {
+      setDirectionError('El código postal debe tener 5 dígitos');
+      return false;
+    }
+    
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const completeData = { ...formData, isComplete: true };
-    localStorage.setItem(`org_profile_${organizationId}`, JSON.stringify(completeData));
-    setFormData(completeData);
+    
+    // Validate direction
+    if (!validateDirection(formData.direction)) {
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // Create DirectionModel instance
+      const directionModel = new DirectionModel({
+        // If there's an existing ID, use it (for update), otherwise undefined (for create)
+        id_direccion: formData.direction?.id_direccion || undefined,
+        calle: formData.direction!.calle!,
+        num_exterior: formData.direction!.num_exterior!,
+        num_interior: formData.direction!.num_interior || null,
+        cp: formData.direction!.cp!,
+        entidad_federativa: formData.direction!.entidad_federativa!,
+        ciudad_alcaldia: formData.direction!.ciudad_alcaldia!,
+      });
+
+      // Call upsert method from hook
+      await upsertDirection(directionModel);
+      
+      // Update form data with saved direction
+      setFormData(prev => ({
+        ...prev,
+        direction: {
+          ...prev.direction,
+          id_direccion: formData.direction?.id_direccion
+        },
+        isComplete: true
+      }));
+
+      // Save to localStorage as backup
+      const completeData = { ...formData, isComplete: true };
+      localStorage.setItem(`org_profile_${organizationId}`, JSON.stringify(completeData));
+      
+      console.log('Direction saved successfully');
+    } catch (error) {
+      console.error('Error saving direction:', error);
+      setDirectionError('Error al guardar la dirección. Por favor intenta de nuevo.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const donationLink = origin && organizationId ? `${origin}/donate/${organizationId}` : '';
@@ -93,8 +216,7 @@ export function OrganizationProfile() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isFormComplete = formData.legalName && formData.rfc && formData.bankName && 
-                        formData.accountNumber && formData.clabe && formData.accountHolder;
+  const isFormComplete = true;
 
   return (
     <div className="space-y-6">
@@ -216,21 +338,15 @@ export function OrganizationProfile() {
               />
             </div>
 
+            {/* Direction Form - Replaces the old address field */}
             <div className="sm:col-span-2">
-              <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
-                Dirección Fiscal *
-              </label>
-              <input
-                type="text"
-                id="address"
-                name="address"
-                required
-                value={formData.address}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-                placeholder="Calle, número, colonia, ciudad"
+              <DirectionForm 
+                value={formData.direction || {}}
+                onChange={handleDirectionChange}
+                error={directionError}
               />
             </div>
+
 
             <div className="sm:col-span-2">
               <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
@@ -250,7 +366,7 @@ export function OrganizationProfile() {
           </div>
         </div>
 
-        {/* Bank Information */}
+        {/* Bank Information 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
           <div className="flex items-center gap-2 mb-6">
             <CreditCard className="w-5 h-5 text-emerald-600" />
@@ -333,7 +449,7 @@ export function OrganizationProfile() {
             </div>
           </div>
         </div>
-
+        */}
         {/* Submit Button */}
         <div className="flex justify-end">
           <button
@@ -346,13 +462,14 @@ export function OrganizationProfile() {
         </div>
       </form>
 
-      {/* Preview Modal */}
+      {/* Preview Modal 
       {showPreview && (
         <DonationPreviewModal 
           organizationData={formData}
           onClose={() => setShowPreview(false)}
         />
       )}
+      */}
     </div>
   );
 }

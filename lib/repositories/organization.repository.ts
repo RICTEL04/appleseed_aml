@@ -8,7 +8,7 @@ export class OrganizationRepository {
     async getAll(): Promise<OrganizationModel[]> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
-            .from('osc')
+            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || '')
             .select('*').order('created_at', { ascending: false })
         console.log('Supabase response:', { data, error })
         if (error) {
@@ -18,6 +18,37 @@ export class OrganizationRepository {
 
         return (data || []).map((item: IOrganization) => new OrganizationModel(item))
     }
+
+    async getById(id: string): Promise<OrganizationModel | null> {
+        const supabase = getSupabaseClient()
+        console.log(id, "is it good?")
+        const {data, error} = await supabase
+            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || '')
+            .select('*')
+            .eq('id_osc', id)
+            .single()
+        if (error) {
+            console.error(`Error fetching organization with id ${id}:`, error)
+            throw new Error('Failed to fetch organization')
+        }
+        return data ? new OrganizationModel(data) : null
+    }
+
+    async update(organization: IOrganization): Promise<OrganizationModel> {
+        const supabase = getSupabaseClient()
+        const { data, error } = await supabase
+            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || '')
+            .upsert(organization)
+            .select()
+            .single()
+        if (error) {
+            console.error('Error updating organization:', error)
+            throw new Error('Failed to update organization')
+        }
+        return new OrganizationModel(data)
+    }
+
+
 }
 
 export const organizationRepository = new OrganizationRepository()
