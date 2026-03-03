@@ -25,22 +25,28 @@ export function useDirections() {
     });
 
     const upsertDirection = useCallback(async (direction: DirectionModel) => {
+        
+        const updatedDirection = null;
         try {
             setLoading(true);
             const updatedDirection = await directionRepository.upsert(direction);
+            return updatedDirection;
         } catch (err) {
             console.error('Error upserting direction:', err);
             setError('Failed to upsert direction');
         }
         finally {
             setLoading(false);
+            
         }
+
     }, []);
 
-    const fetchDirectionById = useCallback(async (id: string) => {
+    const fetchDirectionById = useCallback(async (id: string | undefined) => {
         
 
         try {
+            if(id == undefined) return null;
             setLoading(true);
             const direction = await directionRepository.getById(id);
             console.log(direction, "direction in fetchDirectionByIdUser")

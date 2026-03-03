@@ -37,7 +37,7 @@ export class OrganizationRepository {
     async update(organization: IOrganization): Promise<OrganizationModel> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
-            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || '')
+            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc')
             .upsert(organization)
             .select()
             .single()
@@ -48,6 +48,21 @@ export class OrganizationRepository {
         return new OrganizationModel(data)
     }
 
+    async setDirection(id_osc: string, id_direccion: string): Promise<OrganizationModel> {
+        const supabase = getSupabaseClient()
+        const { data, error } = await supabase
+            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc')
+            .update({ id_direccion })
+            .eq('id_osc', id_osc)
+            .select()
+            .single()
+
+        if (error) {
+            console.error('Error setting direction for organization:', error)
+            throw new Error('Failed to set direction for organization')
+        }
+        return new OrganizationModel(data)
+    }
 
 }
 

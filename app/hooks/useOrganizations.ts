@@ -63,6 +63,7 @@ export function useOrganizations() {
     }, []);
 
     const fetchOrganization = useCallback(async () => {
+        if (!user) return null;
         const id = user?.id;
         console.log(id);
         try {
@@ -78,6 +79,21 @@ export function useOrganizations() {
         }
     }, [user]);
 
-    return { organizations, loading, error, refetch: fetchOrganizations, fetchOrganization };
+    const setDirectionById = useCallback(async (id_direccion: string) => {
+        const id_osc = user?.id;
+        try {
+            setLoading(true);
+            const updatedOrg = await organizationRepository.setDirection(id_osc, id_direccion);
+            return updatedOrg;
+        } catch (err) {
+            console.error(`Error setting direction for organization with id ${id_osc}:`, err);
+            setError(`Failed to set direction for organization with id ${id_osc}`);
+            return null;
+        } finally {            
+            setLoading(false);
+        }
+    }, [user]);
+
+    return { organizations, loading, error, refetch: fetchOrganizations, fetchOrganization, setDirectionById, updateOrganization     };
 
 }   
