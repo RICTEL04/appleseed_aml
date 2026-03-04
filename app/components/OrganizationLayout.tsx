@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, Link, useLocation } from 'react-router';
-import { LayoutDashboard, Bell, FileText, MessageSquare, LogOut, Menu, User } from 'lucide-react';
+import { LayoutDashboard, Bell, FileText, MessageSquare, LogOut, Menu, User, CircleDollarSign} from 'lucide-react';
 import Image from 'next/image';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 
@@ -112,15 +112,15 @@ export function OrganizationLayout() {
             </Link>
 
             <Link
-              to="/organization/profile"
+              to="/organization/donations"
               className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${
-                isActive('/organization/profile')
+                isActive('/organization/donations')
                   ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'
                   : 'text-gray-700 hover:bg-gray-50'
               }`}
             >
-              <User className="w-5 h-5" />
-              <span>Perfil y Donaciones</span>
+              <CircleDollarSign className="w-5 h-5" />
+              <span>Donaciones</span>
             </Link>
 
             <Link
@@ -157,6 +157,18 @@ export function OrganizationLayout() {
             >
               <MessageSquare className="w-5 h-5" />
               <span>Mensajes</span>
+            </Link>
+
+            <Link
+              to="/organization/profile"
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${
+                isActive('/organization/profile')
+                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <User className="w-5 h-5" />
+              <span>Perfil</span>
             </Link>
 
             <div className="pt-6 mt-6 border-t border-gray-100 px-3">
