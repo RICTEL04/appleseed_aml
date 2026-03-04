@@ -16,7 +16,9 @@ export function RegisterOrganization() {
     legalRepresentative: '',
     contact: '',
     email: '',
-    address: '',
+    street: '',
+    exteriorNumber: '',
+    interiorNumber: '',
     city: '',
     state: '',
     postalCode: '',
@@ -73,7 +75,7 @@ export function RegisterOrganization() {
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Organización Registrada!</h2>
           <p className="text-gray-600 mb-6">
-            La organización fue registrada y se envió un correo para que configure su contraseña e inicie sesión.
+            La organización fue registrada correctamente. La contraseña inicial es AML123.
           </p>
           <p className="text-sm text-gray-500">Redirigiendo...</p>
         </div>
@@ -221,18 +223,49 @@ export function RegisterOrganization() {
             </div>
 
             <div className="sm:col-span-2">
-              <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
-                Dirección *
+              <label htmlFor="street" className="block text-sm font-medium text-gray-700 mb-2">
+                Calle *
               </label>
               <input
                 type="text"
-                id="address"
-                name="address"
+                id="street"
+                name="street"
                 required
-                value={formData.address}
+                value={formData.street}
                 onChange={handleChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-                placeholder="Calle, número, colonia"
+                placeholder="Ej. Av. Insurgentes Sur"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="exteriorNumber" className="block text-sm font-medium text-gray-700 mb-2">
+                Número Exterior *
+              </label>
+              <input
+                type="text"
+                id="exteriorNumber"
+                name="exteriorNumber"
+                required
+                value={formData.exteriorNumber}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+                placeholder="Ej. 123"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="interiorNumber" className="block text-sm font-medium text-gray-700 mb-2">
+                Número Interior
+              </label>
+              <input
+                type="text"
+                id="interiorNumber"
+                name="interiorNumber"
+                value={formData.interiorNumber}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+                placeholder="Ej. 4B (opcional)"
               />
             </div>
 
