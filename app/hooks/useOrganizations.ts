@@ -1,99 +1,111 @@
-import {useState, useEffect, useCallback} from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { organizationRepository } from '@/lib/repositories/organization.repository';
 import { OrganizationModel } from '@/lib/models/organization.model';
 import { getSupabaseClient } from '@/lib/supabase';
-import { get } from 'http';
 
 export function useOrganizations() {
-    const [organizations, setOrganizations] = useState<OrganizationModel[]>([]);
-    const [loading, setLoading] = useState<boolean>(false);
-    const [error, setError] = useState<string | null>(null);
-    const [user , setUser] = useState<any>(null);
-    const [supabase, setSupabase] = useState<any>(null);
-    
+  // All organizations (for admin/list views)
+  const [organizations, setOrganizations] = useState<OrganizationModel[]>([]);
+  const [loadingAll, setLoadingAll] = useState<boolean>(true);
 
-    
-    useEffect(() => {
-        const initializeSupabase = async () => {
-            const supabaseClient = getSupabaseClient();
-            setSupabase(supabaseClient);
-            const { data, error } = await supabaseClient.auth.getUser();
-            if (data?.user) {
-                setUser(data.user);
-                console.log(data.user.id)
-            }
-        };
-        initializeSupabase();
-    }, []); // Only run once on mount
+  // Current user's organization (for profile view)
+  const [organization, setOrganization] = useState<OrganizationModel | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
-    const fetchOrganizations = useCallback(async () => {
-        
-        try {
-            setLoading(true);
-            const data = await organizationRepository.getAll();
-            setOrganizations(data);
-            setError(null);
-        } catch (err) {
-            console.error('Error fetching organizations:', err);
-            setError('Failed to fetch organizations');
-        }
-        finally {
-            setLoading(false);
-        }
-        
-        
-    },   []);
+  const [error, setError] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
-    useEffect(() => {
-        fetchOrganizations();
-    }, [fetchOrganizations]);
+  // Step 1: resolve userId once on mount
+  useEffect(() => {
+    const init = async () => {
+      const client = getSupabaseClient();
+      const { data, error } = await client.auth.getSession();
+      const user = data?.session?.user;
+      if (error) console.error('[useOrganizations] auth error:', error);
+      if (user) {
+        console.log('[useOrganizations] userId =>', user.id);
+        setUserId(user.id);
+      } else {
+        console.warn('[useOrganizations] no authenticated user');
+        setLoading(false);
+      }
+    };
+    init();
+  }, []);
 
+  // Step 2: fetch all organizations (no auth needed)
+  useEffect(() => {
+    const run = async () => {
+      try {
+        setLoadingAll(true);
+        const data = await organizationRepository.getAll();
+        setOrganizations(data);
+        setError(null);
+      } catch (err) {
+        console.error('[useOrganizations] getAll error:', err);
+        setError('Failed to fetch organizations');
+      } finally {
+        setLoadingAll(false);
+      }
+    };
+    run();
+  }, []);
 
-    const updateOrganization = useCallback(async (organization: OrganizationModel) => {
-        try {
-            setLoading(true);
-            const updatedOrg = await organizationRepository.update(organization);
-        } catch (err) {
-            console.error('Error updating organization:', err);
-            setError('Failed to update organization');
-        }
-        finally {
-            setLoading(false);
-        }   
-    }, []);
+  // Step 3: fetch current user's organization once userId is ready
+  useEffect(() => {
+    if (!userId) return;
+    const run = async () => {
+      try {
+        setLoading(true);
+        console.log('[useOrganizations] fetching org for userId =>', userId);
+        const org = await organizationRepository.getById(userId);
+        console.log('[useOrganizations] org =>', org);
+        setOrganization(org);
+        setError(null);
+      } catch (err) {
+        console.error('[useOrganizations] getById error:', err);
+        setError('Failed to fetch organization');
+      } finally {
+        setLoading(false);
+      }
+    };
+    run();
+  }, [userId]);
 
-    const fetchOrganization = useCallback(async () => {
-        if (!user) return null;
-        const id = user?.id;
-        console.log(id);
-        try {
-            setLoading(true);
-            const organization = await organizationRepository.getById(id);
-            return organization;
-        } catch (err) {
-            console.error(`Error fetching organization with id ${id}:`, err);
-            setError(`Failed to fetch organization with id ${id}`);
-            return null;
-        } finally {            
-            setLoading(false);
-        }
-    }, [user]);
+  const updateOrganization = useCallback(async (org: OrganizationModel) => {
+    try {
+      setLoading(true);
+      await organizationRepository.update(org);
+      setOrganization(org);
+    } catch (err) {
+      console.error('[useOrganizations] update error:', err);
+      setError('Failed to update organization');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    const setDirectionById = useCallback(async (id_direccion: string) => {
-        const id_osc = user?.id;
-        try {
-            setLoading(true);
-            const updatedOrg = await organizationRepository.setDirection(id_osc, id_direccion);
-            return updatedOrg;
-        } catch (err) {
-            console.error(`Error setting direction for organization with id ${id_osc}:`, err);
-            setError(`Failed to set direction for organization with id ${id_osc}`);
-            return null;
-        } finally {            
-            setLoading(false);
-        }
-    }, [user]);
+  const setDirectionById = useCallback(async (id_direccion: string) => {
+    if (!userId) return null;
+    try {
+      const updated = await organizationRepository.setDirection(userId, id_direccion);
+      return updated;
+    } catch (err) {
+      console.error('[useOrganizations] setDirection error:', err);
+      return null;
+    }
+  }, [userId]);
 
-    return { organizations, loading, error, refetch: fetchOrganizations, fetchOrganization, setDirectionById, updateOrganization     };
-
-}   
+  return {
+    // For list/admin views
+    organizations,
+    loading: loadingAll,
+    // For profile view
+    organization,
+    loadingProfile: loading,
+    // Shared
+    error,
+    updateOrganization,
+    setDirectionById,
+  };
+}

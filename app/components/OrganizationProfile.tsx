@@ -1,322 +1,191 @@
 "use client"
 
-import { useState, useEffect } from 'react';
-import { Building2, CreditCard, Share2, CheckCircle, Copy, Eye, X, ArrowRight, ArrowLeft, Heart, AlertCircle, Shield } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Building2, CreditCard, Share2, CheckCircle, Copy, Eye, MapPin } from 'lucide-react';
 
-
-import {DirectionForm} from './DirectionForm';
-import {BankAccountForm, BankAccountData} from '../components/BankAccountForm'
+import { DirectionForm } from './DirectionForm';
+import { BankAccountForm, BankAccountData } from '../components/BankAccountForm';
 
 import { DirectionModel, IDirection } from '@/lib/models/direction.model';
-import { OrganizationModel, IOrganization } from '@/lib/models/organization.model';
-import { BankAccountModel, IBankAccount } from '@/lib/models/bank-account.model';
+import { OrganizationModel } from '@/lib/models/organization.model';
+import { BankAccountModel } from '@/lib/models/bank-account.model';
 
 import { useOrganizations } from '../hooks/useOrganizations';
 import { useDirections } from '../hooks/useDirections';
-import {useBankAccount} from '../hooks/useBankAccount'
+import { useBankAccount } from '../hooks/useBankAccount';
 
-import { v4 as uuidv4 } from 'uuid';
-
-interface OrganizationData {
-  legalName: string;
-  rfc: string;
-  bankAccount: BankAccountData; // Group bank fields together
-  direction?: Partial<IDirection>;
-  phoneNumber: string;
-  email: string;
+interface OrganizationFormData {
   description: string;
+  direction?: Partial<IDirection>;
+  bankAccount: BankAccountData;
   isComplete: boolean;
 }
 
+function Spinner() {
+  return <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin inline-block" />;
+}
+
+function FieldSkeleton({ wide = false }: { wide?: boolean }) {
+  return <div className={`h-11 bg-gray-100 rounded-lg animate-pulse ${wide ? 'w-full' : 'w-2/3'}`} />;
+}
 
 export function OrganizationProfile() {
-  const { fetchOrganization, updateOrganization } = useOrganizations();
+  const { organization, loadingProfile: orgLoading, updateOrganization, setDirectionById } = useOrganizations();
   const { fetchDirectionById, upsertDirection, loading: directionLoading } = useDirections();
-  const {fetchBankAccount, upsertBankAccount, loading: bankLoading } = useBankAccount();
+  const { bankAccount, loading: bankLoading, upsertBankAccount } = useBankAccount();
 
-  const [organizationId, setOrganizationId] = useState<string>('');
-  const [organizationName, setOrganizationName] = useState<string>('');
-  const [origin, setOrigin] = useState<string>('');
+  const [organizationId, setOrganizationId] = useState('');
+  const [origin, setOrigin] = useState('');
   const [copied, setCopied] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [directionError, setDirectionError] = useState<string>('');
-  const [bankError, setBankError] = useState<string>('');
-  
+  const [directionError, setDirectionError] = useState('');
+  const [bankError, setBankError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [data, setData] = useState<OrganizationModel | null>(null);
-  const [direction, setDirection] = useState<DirectionModel | null>(null);
-  const [cuentaBanco, setCuentaBanco] = useState<BankAccountModel | null>(null);
+  // Local direction model (needs separate fetch once org is ready)
+  const [directionModel, setDirectionModel] = useState<DirectionModel | null>(null);
+  const [directionFetched, setDirectionFetched] = useState(false);
 
-  const [formData, setFormData] = useState<OrganizationData>({
-    legalName: '',
-    rfc: '',
-    bankAccount: {
-      bankName: '',
-      accountHolder: '',
-      accountNumber: '',
-      clabe: '',
-    },
-    direction: undefined,
-    phoneNumber: '',
-    email: '',
+  // Editable form state (separate from read-only org fields)
+  const [formData, setFormData] = useState<OrganizationFormData>({
     description: '',
+    direction: undefined,
+    bankAccount: { bankName: '', accountHolder: '', accountNumber: '', clabe: '' },
     isComplete: false,
   });
 
-  // Load organization data
-  useEffect(() => {
-    async function fetchData() {
-      const orgData = await fetchOrganization();
-      setData(orgData);
-    }
-    fetchData();
-  }, [fetchOrganization]);
-
-  // Load direction data
-  useEffect(() => {
-    
-    async function fetchDirectionData() {
-      const dirData = await fetchDirectionById(data?.id_direccion);
-      setDirection(dirData);
-    }
-    fetchDirectionData();
-  }, [data]);
-
-  //Load data from bank account
-  useEffect(() => {
-    async function fetchBankData() {
-      const bankData = await fetchBankAccount();
-      setCuentaBanco(bankData);
-    }
-    fetchBankData();
-  }, [data]);
-
-  // Update form when data or direction changes
-  useEffect(() => {
-    if (data) {
-      setFormData((prev) => ({
-        ...prev,
-        legalName: data.nombre_organizacion,
-        rfc: data.rfc,
-        phoneNumber: data.telefono,
-        email: data.email,
-        description: data.actividades_principales,
-        direction: direction ? {
-          calle: direction.calle || '',
-          num_exterior: direction.num_exterior || '',
-          num_interior: direction.num_interior || null,
-          cp: direction.cp || '',
-          entidad_federativa: direction.entidad_federativa || '',
-          ciudad_alcaldia: direction.ciudad_alcaldia || '',
-          id_direccion: direction.id_direccion // Keep the ID for updates
-        } : prev.direction,
-        bankAccount: cuentaBanco ? {
-          bankName: cuentaBanco.banco,
-          accountHolder: cuentaBanco.titular,
-          accountNumber: cuentaBanco.num_cuenta,
-          clabe: cuentaBanco.clabe
-        } : prev.bankAccount
-      }));
-    }
-  }, [data, direction]);
-
   useEffect(() => {
     setOrganizationId(localStorage.getItem('organization_id') || '');
-    setOrganizationName(localStorage.getItem('organization_name') || '');
     setOrigin(window.location.origin);
   }, []);
 
+  // Once org loads, populate description and fetch direction
   useEffect(() => {
-    if (organizationName) {
-      setFormData((prev) => ({
-        ...prev,
-        legalName: prev.legalName || organizationName,
-      }));
-    }
-  }, [organizationName]);
+    if (!organization) return;
+    setFormData(prev => ({ ...prev, description: organization.actividades_principales }));
+  }, [organization]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
+  // Fetch direction once we have the org's direction ID
+  useEffect(() => {
+    if (!organization?.id_direccion || directionFetched) return;
+    setDirectionFetched(true);
+    fetchDirectionById(organization.id_direccion).then(dir => {
+      if (dir) {
+        setDirectionModel(dir);
+        setFormData(prev => ({
+          ...prev,
+          direction: {
+            id_direccion: dir.id_direccion,
+            calle: dir.calle || '',
+            num_exterior: dir.num_exterior || '',
+            num_interior: dir.num_interior || null,
+            cp: dir.cp || '',
+            entidad_federativa: dir.entidad_federativa || '',
+            ciudad_alcaldia: dir.ciudad_alcaldia || '',
+          },
+        }));
+      }
     });
-  };
+  }, [organization, directionFetched, fetchDirectionById]);
 
-  // Handler for bank account changes
-  const handleBankAccountChange = (bankData: BankAccountData) => {
-    setFormData({
-      ...formData,
-      bankAccount: bankData,
-    });
-    if (bankError) setBankError('');
-  };
+  // Populate bank form once bank account loads from hook
+  useEffect(() => {
+    if (!bankAccount) return;
+    setFormData(prev => ({
+      ...prev,
+      bankAccount: {
+        bankName: bankAccount.banco,
+        accountHolder: bankAccount.titular,
+        accountNumber: bankAccount.num_cuenta,
+        clabe: bankAccount.clabe,
+      },
+    }));
+  }, [bankAccount]);
 
-  const handleDirectionChange = (directionData: Partial<IDirection>) => {
-    setFormData({
-      ...formData,
-      direction: directionData,
-    });
-
-    if (directionError) setDirectionError('');
-  };
-
-  const validateDirection = (direction?: Partial<IDirection>): boolean => {
-    if (!direction) return false;
-    
-    const required: (keyof IDirection)[] = [
-      'calle', 'num_exterior', 'cp', 
-      'entidad_federativa', 'ciudad_alcaldia'
-    ];
-    
+  // ── Validation ────────────────────────────────────────────────────────────────
+  const validateDirection = (dir?: Partial<IDirection>): boolean => {
+    if (!dir) { setDirectionError('La dirección es requerida'); return false; }
+    const required: (keyof IDirection)[] = ['calle', 'num_exterior', 'cp', 'entidad_federativa', 'ciudad_alcaldia'];
     for (const field of required) {
-      if (!direction[field] || direction[field]?.trim() === '') {
+      if (!dir[field] || String(dir[field]).trim() === '') {
         setDirectionError(`La dirección requiere ${field.replace('_', ' ')}`);
         return false;
       }
     }
-    
-    if (direction.cp && !/^\d{5}$/.test(direction.cp)) {
-      setDirectionError('El código postal debe tener 5 dígitos');
-      return false;
-    }
-    
+    if (dir.cp && !/^\d{5}$/.test(dir.cp)) { setDirectionError('El código postal debe tener 5 dígitos'); return false; }
     return true;
   };
 
-  const validateBankAccount = (bankAccount: BankAccountData): boolean => {
-    if (!bankAccount.bankName) {
-      setBankError('Debe seleccionar un banco');
-      return false;
-    }
-    if (!bankAccount.accountHolder) {
-      setBankError('El titular de la cuenta es requerido');
-      return false;
-    }
-    if (!bankAccount.accountNumber) {
-      setBankError('El número de cuenta es requerido');
-      return false;
-    }
-    if (!bankAccount.clabe || bankAccount.clabe.length !== 18) {
-      setBankError('La CLABE debe tener 18 dígitos');
-      return false;
-    }
+  const validateBank = (bank: BankAccountData): boolean => {
+    if (!bank.bankName) { setBankError('Debe seleccionar un banco'); return false; }
+    if (!bank.accountHolder) { setBankError('El titular de la cuenta es requerido'); return false; }
+    if (!bank.accountNumber) { setBankError('El número de cuenta es requerido'); return false; }
+    if (!bank.clabe || bank.clabe.length !== 18) { setBankError('La CLABE debe tener 18 dígitos'); return false; }
     return true;
   };
 
+  // ── Submit ────────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validate direction
-    if (!validateDirection(formData.direction)) {
-      return;
-    }
-
-    // Validate bank account
-    if (!validateBankAccount(formData.bankAccount)) {
-      return;
-    }
+    if (!validateDirection(formData.direction)) return;
+    if (!validateBank(formData.bankAccount)) return;
 
     setIsSubmitting(true);
-
     try {
-      // STEP 1: Save/Create the direction
-      const directionModel = new DirectionModel({
-        id_direccion: direction?.id_direccion, // Use existing ID if available
+      const savedDir = await upsertDirection(new DirectionModel({
+        id_direccion: directionModel?.id_direccion,
         calle: formData.direction!.calle!,
         num_exterior: formData.direction!.num_exterior!,
-        num_interior: formData.direction!.num_interior || "",
+        num_interior: formData.direction!.num_interior || '',
         cp: formData.direction!.cp!,
         entidad_federativa: formData.direction!.entidad_federativa!,
         ciudad_alcaldia: formData.direction!.ciudad_alcaldia!,
-      });
+      }));
 
-      console.log("STEP 1: Saving direction...");
-      const savedDirection = await upsertDirection(directionModel);
-      console.log("Direction saved:", savedDirection);
-
-      // STEP 2: SAVE/CREATE the BankAccount
-      const bankModel = new BankAccountModel({
-        id_cuenta_banco: cuentaBanco?.id_cuenta_banco,
+      const savedBank = await upsertBankAccount(new BankAccountModel({
+        id_cuenta_banco: bankAccount?.id_cuenta_banco,
         clabe: formData.bankAccount.clabe,
-        num_cuenta: formData.bankAccount.accountNumber!,
+        num_cuenta: formData.bankAccount.accountNumber,
         banco: formData.bankAccount.bankName,
         titular: formData.bankAccount.accountHolder,
-        id_persona: data?.id_osc || null
-      })
+        id_persona: organization?.id_osc || null,
+      }));
 
-      //STEP 2: SAVE/
-      console.log("STEP 2: Saving direction...")
-      const savedBankAccount = await upsertBankAccount(bankModel);
-      console.log("Bank saved:", savedBankAccount)
+      if (savedDir && organization && savedDir.id_direccion) {
+        // Link the new direction ID to the org row (this uses .eq('id_osc', ...) correctly)
+        await setDirectionById(savedDir.id_direccion);
 
-      if (savedDirection && data && savedBankAccount) {
-        // STEP 3: Update the organization with the saved direction ID and description
-        const updatedOrgData = {
-          ...data,
-          id_direccion: savedDirection.id_direccion,
-          actividades_principales: formData.description
-        };
-
-        console.log("STEP 2: Updating organization...");
-        const updatedOrganization = new OrganizationModel(updatedOrgData);
-        await updateOrganization(updatedOrganization);
-        
-        // STEP 3: Update all local states
-        setData(updatedOrganization);
-        setDirection(savedDirection);
-        
-        // STEP 4: Mark as complete and update form
-        setFormData(prev => ({
-          ...prev,
-          direction: {
-            ...prev.direction,
-            id_direccion: savedDirection.id_direccion
-          },
-          isComplete: true // This changes the button text
+        // Update description separately — only send the fields that changed
+        await updateOrganization(new OrganizationModel({
+          ...organization,
+          id_direccion: savedDir.id_direccion,
+          actividades_principales: formData.description,
         }));
 
-        // Save to localStorage
-        localStorage.setItem(`org_profile_${organizationId}`, JSON.stringify({
-          ...formData,
-          isComplete: true
-        }));
-        
-        console.log('✅ All done in ONE click!');
+        setDirectionModel(savedDir);
+        setFormData(prev => ({ ...prev, isComplete: true }));
+        localStorage.setItem(`org_profile_${organizationId}`, JSON.stringify({ isComplete: true }));
       }
-    } catch (error) {
-      console.error('Error:', error);
+    } catch (err) {
+      console.error('[OrganizationProfile] submit error:', err);
       setDirectionError('Error al guardar. Por favor intenta de nuevo.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-
-
   const donationLink = origin && organizationId ? `${origin}/donate/${organizationId}` : '';
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(donationLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-    const isFormComplete = formData.bankAccount.bankName && 
-                        formData.bankAccount.accountNumber && 
-                        formData.bankAccount.clabe && 
-                        formData.bankAccount.accountHolder && 
-                        formData.description;
+  const isFormComplete = formData.bankAccount.bankName && formData.bankAccount.accountNumber &&
+    formData.bankAccount.clabe && formData.bankAccount.accountHolder && formData.description;
+  const isSaving = isSubmitting || directionLoading;
+  const stillLoading = orgLoading || bankLoading;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Perfil de Organización</h1>
         <p className="text-gray-600">Configure su información bancaria para recibir donaciones</p>
       </div>
 
-      {/* Donation Link Card - Only show if complete */}
       {formData.isComplete && (
         <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-start gap-4">
@@ -325,152 +194,116 @@ export function OrganizationProfile() {
             </div>
             <div className="flex-1">
               <h2 className="text-xl font-bold mb-2">¡Tu Link de Donación está Listo!</h2>
-              <p className="text-emerald-50 mb-4">
-                Comparte este enlace con tus donadores para recibir contribuciones
-              </p>
-              
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 mb-3">
                 <div className="flex items-center gap-3">
                   <code className="flex-1 text-sm break-all">{donationLink}</code>
-                  <button
-                    onClick={copyToClipboard}
-                    className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition flex items-center gap-2 flex-shrink-0"
-                  >
+                  <button onClick={() => { navigator.clipboard.writeText(donationLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                    className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition flex items-center gap-2 flex-shrink-0">
                     {copied ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     {copied ? 'Copiado' : 'Copiar'}
                   </button>
                 </div>
               </div>
-
-              <button
-                onClick={() => setShowPreview(true)}
-                className="inline-flex items-center gap-2 text-sm text-white hover:text-emerald-100 transition bg-white/10 px-4 py-2 rounded-lg"
-              >
-                <Eye className="w-4 h-4" />
-                Ver vista previa de la página
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Basic Information */}
+        {/* General Info */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
           <div className="flex items-center gap-2 mb-6">
             <Building2 className="w-5 h-5 text-emerald-600" />
             <h2 className="text-xl font-semibold text-gray-900">Información General</h2>
+            {orgLoading && <span className="ml-auto flex items-center gap-1 text-xs text-gray-400"><Spinner /> Cargando...</span>}
           </div>
-          
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="sm:col-span-2">
-              <label htmlFor="legalName" className="block text-sm font-medium text-gray-700 mb-2">
-                Nombre Legal
-              </label>
-              <textarea
-                readOnly
-                id="legalName"
-                name="legalName"
-                value={formData.legalName}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-                placeholder="Nombre legal de la organización"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Nombre Legal</label>
+              {orgLoading ? <FieldSkeleton wide /> : (
+                <textarea readOnly value={organization?.nombre_organizacion ?? ''}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50" />
+              )}
             </div>
-
             <div>
-              <label htmlFor="rfc" className="block text-sm font-medium text-gray-700 mb-2">
-                RFC 
-              </label>
-              <textarea
-                readOnly
-                id="rfc"
-                name="rfc"
-                value={formData.rfc}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-2">RFC</label>
+              {orgLoading ? <FieldSkeleton /> : (
+                <textarea readOnly value={organization?.rfc ?? ''}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50" />
+              )}
             </div>
-
             <div>
-              <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700 mb-2">
-                Teléfono 
-              </label>
-              <textarea
-                readOnly
-                id="phoneNumber"
-                name="phoneNumber"
-                value={formData.phoneNumber}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Teléfono</label>
+              {orgLoading ? <FieldSkeleton /> : (
+                <textarea readOnly value={organization?.telefono ?? ''}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50" />
+              )}
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Correo Electrónico</label>
+              {orgLoading ? <FieldSkeleton wide /> : (
+                <textarea readOnly value={organization?.email ?? ''}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50" />
+              )}
             </div>
 
+            {/* Direction */}
             <div className="sm:col-span-2">
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Correo Electrónico 
-              </label>
-              <textarea
-                readOnly
-                id="email"
-                name="email"
-                value={formData.email}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-              />
+              {orgLoading || (organization?.id_direccion && !directionFetched) ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <MapPin className="w-5 h-5 text-emerald-600" />
+                    <h3 className="text-lg font-semibold text-gray-900">Dirección Fiscal</h3>
+                    <span className="ml-auto flex items-center gap-1 text-xs text-gray-400"><Spinner /> Cargando...</span>
+                  </div>
+                  <FieldSkeleton wide />
+                  <div className="grid grid-cols-2 gap-3"><FieldSkeleton /><FieldSkeleton /><FieldSkeleton /><FieldSkeleton /></div>
+                  <FieldSkeleton wide />
+                </div>
+              ) : (
+                <DirectionForm value={formData.direction || {}} onChange={(d) => { setFormData(p => ({ ...p, direction: d })); setDirectionError(''); }} error={directionError} />
+              )}
             </div>
 
-            {/* Direction Form - Replaces the old address field */}
+            {/* Description */}
             <div className="sm:col-span-2">
-              <DirectionForm 
-                value={formData.direction || {}}
-                onChange={handleDirectionChange}
-                error={directionError}
-              />
-            </div>
-
-
-            <div className="sm:col-span-2">
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                Descripción de la Organización *
-              </label>
-              <textarea
-                id="description"
-                name="description"
-                required
-                rows={4}
-                value={formData.description}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none resize-none"
-                placeholder="Breve descripción de la misión y actividades de la organización..."
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Descripción de la Organización *</label>
+              {orgLoading ? <FieldSkeleton wide /> : (
+                <textarea name="description" required rows={4} value={formData.description}
+                  onChange={e => setFormData(p => ({ ...p, description: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+                  placeholder="Breve descripción de la misión y actividades de la organización..." />
+              )}
             </div>
           </div>
         </div>
 
-      {/* Bank Information - Using the new BankAccountForm component */}
-      <BankAccountForm 
-        value={formData.bankAccount}
-        onChange={handleBankAccountChange}
-        error={bankError}
-      />
-  
+        {/* Bank Info */}
+        {bankLoading ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+            <div className="flex items-center gap-2 mb-6">
+              <CreditCard className="w-5 h-5 text-emerald-600" />
+              <h2 className="text-xl font-semibold text-gray-900">Información Bancaria</h2>
+              <span className="ml-auto flex items-center gap-1 text-xs text-gray-400"><Spinner /> Cargando...</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <FieldSkeleton /><FieldSkeleton /><FieldSkeleton /><FieldSkeleton />
+            </div>
+          </div>
+        ) : (
+          <BankAccountForm value={formData.bankAccount}
+            onChange={d => { setFormData(p => ({ ...p, bankAccount: d })); setBankError(''); }}
+            error={bankError} />
+        )}
 
-      {/* Submit Button */}
-      <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={!isFormComplete || isSubmitting || directionLoading}
-            className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition shadow-lg shadow-emerald-600/30 flex items-center gap-2"
-          >
-            {(isSubmitting || directionLoading) ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Guardando...
-              </>
-            ) : (
-              formData.isComplete ? 'Actualizar Información' : 'Guardar'
-            )}
+        <div className="flex justify-end">
+          <button type="submit" disabled={!isFormComplete || isSaving || stillLoading}
+            className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition shadow-lg shadow-emerald-600/30 flex items-center gap-2">
+            {isSaving ? (<><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Guardando...</>) :
+              (formData.isComplete ? 'Actualizar Información' : 'Guardar')}
           </button>
         </div>
-      </form>    
+      </form>
     </div>
   );
 }

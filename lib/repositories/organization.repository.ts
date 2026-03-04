@@ -34,16 +34,19 @@ export class OrganizationRepository {
         return data ? new OrganizationModel(data) : null
     }
 
+    // ✅ Fixed: added .eq('id_osc', organization.id_osc) so UPDATE has a WHERE clause
     async update(organization: IOrganization): Promise<OrganizationModel> {
         const supabase = getSupabaseClient()
+        const { id_osc, ...fields } = organization as any
         const { data, error } = await supabase
-            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc')
-            .update(organization)
-            .select()
-            .single()
+        .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc')
+        .update(fields)
+        .eq('id_osc', id_osc)
+        .select()
+        .single()
         if (error) {
-            console.error('Error updating organization:', error)
-            throw new Error('Failed to update organization')
+        console.error('Error updating organization:', error)
+        throw new Error('Failed to update organization')
         }
         return new OrganizationModel(data)
     }
