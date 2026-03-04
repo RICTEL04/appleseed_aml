@@ -2,20 +2,25 @@
 
 import { useState, useEffect } from 'react';
 import { Building2, CreditCard, Share2, CheckCircle, Copy, Eye, X, ArrowRight, ArrowLeft, Heart, AlertCircle, Shield } from 'lucide-react';
+
+
 import {DirectionForm} from './DirectionForm';
+import {BankAccountForm, BankAccountData} from '../components/BankAccountForm'
+
 import { DirectionModel, IDirection } from '@/lib/models/direction.model';
-import { useOrganizations } from '../hooks/useOrganizations';
 import { OrganizationModel, IOrganization } from '@/lib/models/organization.model';
-import { v4 as uuidv4 } from 'uuid';
+import { BankAccountModel, IBankAccount } from '@/lib/models/bank-account.model';
+
+import { useOrganizations } from '../hooks/useOrganizations';
 import { useDirections } from '../hooks/useDirections';
+import {useBankAccount} from '../hooks/useBankAccount'
+
+import { v4 as uuidv4 } from 'uuid';
 
 interface OrganizationData {
   legalName: string;
   rfc: string;
-  bankName: string;
-  accountNumber: string;
-  clabe: string;
-  accountHolder: string;
+  bankAccount: BankAccountData; // Group bank fields together
   direction?: Partial<IDirection>;
   phoneNumber: string;
   email: string;
@@ -23,19 +28,11 @@ interface OrganizationData {
   isComplete: boolean;
 }
 
-interface DonorData {
-  firstName: string;
-  lastName: string;
-  secondLastName: string;
-  rfc: string;
-  email: string;
-  phone: string;
-  address: string;
-}
 
 export function OrganizationProfile() {
-  const { fetchOrganization, setDirectionById, updateOrganization } = useOrganizations();
+  const { fetchOrganization, updateOrganization } = useOrganizations();
   const { fetchDirectionById, upsertDirection, loading: directionLoading } = useDirections();
+  const {fetchBankAccount, upsertBankAccount, loading: bankLoading } = useBankAccount();
 
   const [organizationId, setOrganizationId] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('');
@@ -43,18 +40,23 @@ export function OrganizationProfile() {
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [directionError, setDirectionError] = useState<string>('');
+  const [bankError, setBankError] = useState<string>('');
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [data, setData] = useState<OrganizationModel | null>(null);
   const [direction, setDirection] = useState<DirectionModel | null>(null);
+  const [cuentaBanco, setCuentaBanco] = useState<BankAccountModel | null>(null);
 
   const [formData, setFormData] = useState<OrganizationData>({
     legalName: '',
     rfc: '',
-    bankName: '',
-    accountNumber: '',
-    clabe: '',
-    accountHolder: '',
+    bankAccount: {
+      bankName: '',
+      accountHolder: '',
+      accountNumber: '',
+      clabe: '',
+    },
     direction: undefined,
     phoneNumber: '',
     email: '',
@@ -73,14 +75,22 @@ export function OrganizationProfile() {
 
   // Load direction data
   useEffect(() => {
-    if (!data?.id_direccion) return;
     
     async function fetchDirectionData() {
       const dirData = await fetchDirectionById(data?.id_direccion);
       setDirection(dirData);
     }
     fetchDirectionData();
-  }, [data, fetchDirectionById]);
+  }, [data]);
+
+  //Load data from bank account
+  useEffect(() => {
+    async function fetchBankData() {
+      const bankData = await fetchBankAccount();
+      setCuentaBanco(bankData);
+    }
+    fetchBankData();
+  }, [data]);
 
   // Update form when data or direction changes
   useEffect(() => {
@@ -100,7 +110,13 @@ export function OrganizationProfile() {
           entidad_federativa: direction.entidad_federativa || '',
           ciudad_alcaldia: direction.ciudad_alcaldia || '',
           id_direccion: direction.id_direccion // Keep the ID for updates
-        } : prev.direction
+        } : prev.direction,
+        bankAccount: cuentaBanco ? {
+          bankName: cuentaBanco.banco,
+          accountHolder: cuentaBanco.titular,
+          accountNumber: cuentaBanco.num_cuenta,
+          clabe: cuentaBanco.clabe
+        } : prev.bankAccount
       }));
     }
   }, [data, direction]);
@@ -127,7 +143,14 @@ export function OrganizationProfile() {
     });
   };
 
-
+  // Handler for bank account changes
+  const handleBankAccountChange = (bankData: BankAccountData) => {
+    setFormData({
+      ...formData,
+      bankAccount: bankData,
+    });
+    if (bankError) setBankError('');
+  };
 
   const handleDirectionChange = (directionData: Partial<IDirection>) => {
     setFormData({
@@ -161,11 +184,36 @@ export function OrganizationProfile() {
     return true;
   };
 
+  const validateBankAccount = (bankAccount: BankAccountData): boolean => {
+    if (!bankAccount.bankName) {
+      setBankError('Debe seleccionar un banco');
+      return false;
+    }
+    if (!bankAccount.accountHolder) {
+      setBankError('El titular de la cuenta es requerido');
+      return false;
+    }
+    if (!bankAccount.accountNumber) {
+      setBankError('El número de cuenta es requerido');
+      return false;
+    }
+    if (!bankAccount.clabe || bankAccount.clabe.length !== 18) {
+      setBankError('La CLABE debe tener 18 dígitos');
+      return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validate direction
     if (!validateDirection(formData.direction)) {
+      return;
+    }
+
+    // Validate bank account
+    if (!validateBankAccount(formData.bankAccount)) {
       return;
     }
 
@@ -187,8 +235,23 @@ export function OrganizationProfile() {
       const savedDirection = await upsertDirection(directionModel);
       console.log("Direction saved:", savedDirection);
 
-      if (savedDirection && data) {
-        // STEP 2: Update the organization with the saved direction ID and description
+      // STEP 2: SAVE/CREATE the BankAccount
+      const bankModel = new BankAccountModel({
+        id_cuenta_banco: cuentaBanco?.id_cuenta_banco,
+        clabe: formData.bankAccount.clabe,
+        num_cuenta: formData.bankAccount.accountNumber!,
+        banco: formData.bankAccount.bankName,
+        titular: formData.bankAccount.accountHolder,
+        id_persona: data?.id_osc || null
+      })
+
+      //STEP 2: SAVE/
+      console.log("STEP 2: Saving direction...")
+      const savedBankAccount = await upsertBankAccount(bankModel);
+      console.log("Bank saved:", savedBankAccount)
+
+      if (savedDirection && data && savedBankAccount) {
+        // STEP 3: Update the organization with the saved direction ID and description
         const updatedOrgData = {
           ...data,
           id_direccion: savedDirection.id_direccion,
@@ -229,6 +292,8 @@ export function OrganizationProfile() {
     }
   };
 
+
+
   const donationLink = origin && organizationId ? `${origin}/donate/${organizationId}` : '';
 
   const copyToClipboard = () => {
@@ -237,7 +302,11 @@ export function OrganizationProfile() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isFormComplete = true;
+    const isFormComplete = formData.bankAccount.bankName && 
+                        formData.bankAccount.accountNumber && 
+                        formData.bankAccount.clabe && 
+                        formData.bankAccount.accountHolder && 
+                        formData.description;
 
   return (
     <div className="space-y-6">
@@ -376,89 +445,12 @@ export function OrganizationProfile() {
           </div>
         </div>
 
-        {/* Bank Information 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
-          <div className="flex items-center gap-2 mb-6">
-            <CreditCard className="w-5 h-5 text-emerald-600" />
-            <h2 className="text-xl font-semibold text-gray-900">Información Bancaria</h2>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="bankName" className="block text-sm font-medium text-gray-700 mb-2">
-                Banco *
-              </label>
-              <select
-                id="bankName"
-                name="bankName"
-                required
-                value={formData.bankName}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-              >
-                <option value="">Seleccionar banco...</option>
-                <option value="BBVA">BBVA</option>
-                <option value="Santander">Santander</option>
-                <option value="Banorte">Banorte</option>
-                <option value="HSBC">HSBC</option>
-                <option value="Scotiabank">Scotiabank</option>
-                <option value="Citibanamex">Citibanamex</option>
-                <option value="Inbursa">Inbursa</option>
-                <option value="Otro">Otro</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="accountHolder" className="block text-sm font-medium text-gray-700 mb-2">
-                Titular de la Cuenta *
-              </label>
-              <input
-                type="text"
-                id="accountHolder"
-                name="accountHolder"
-                required
-                value={formData.accountHolder}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-                placeholder="Nombre del titular"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="accountNumber" className="block text-sm font-medium text-gray-700 mb-2">
-                Número de Cuenta *
-              </label>
-              <input
-                type="text"
-                id="accountNumber"
-                name="accountNumber"
-                required
-                value={formData.accountNumber}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-                placeholder="1234567890"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="clabe" className="block text-sm font-medium text-gray-700 mb-2">
-                CLABE Interbancaria *
-              </label>
-              <input
-                type="text"
-                id="clabe"
-                name="clabe"
-                required
-                maxLength={18}
-                value={formData.clabe}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-                placeholder="012345678901234567"
-              />
-              <p className="text-xs text-gray-500 mt-1">18 dígitos</p>
-            </div>
-          </div>
-        </div>
+      {/* Bank Information - Using the new BankAccountForm component */}
+      <BankAccountForm 
+        value={formData.bankAccount}
+        onChange={handleBankAccountChange}
+        error={bankError}
+      />
   
 
       {/* Submit Button */}

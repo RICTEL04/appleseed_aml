@@ -23,7 +23,7 @@ export class OrganizationRepository {
         const supabase = getSupabaseClient()
         console.log(id, "is it good?")
         const {data, error} = await supabase
-            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || '')
+            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc')
             .select('*')
             .eq('id_osc', id)
             .single()
@@ -38,7 +38,7 @@ export class OrganizationRepository {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
             .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc')
-            .upsert(organization)
+            .update(organization)
             .select()
             .single()
         if (error) {
