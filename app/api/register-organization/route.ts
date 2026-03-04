@@ -8,7 +8,9 @@ interface RegisterOrganizationPayload {
   legalRepresentative: string;
   contact: string;
   email: string;
-  address: string;
+  street: string;
+  exteriorNumber: string;
+  interiorNumber: string;
   city: string;
   state: string;
   postalCode: string;
@@ -23,7 +25,8 @@ const requiredFields: Array<keyof RegisterOrganizationPayload> = [
   'legalRepresentative',
   'contact',
   'email',
-  'address',
+  'street',
+  'exteriorNumber',
   'city',
   'state',
   'postalCode',
@@ -36,6 +39,7 @@ const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ??
   process.env.SUPABASE_SECRET_KEY;
 const appSchema = process.env.NEXT_PUBLIC_SUPABASE_APP_SCHEMA ?? 'public';
+const DEFAULT_ORGANIZATION_PASSWORD = 'AML123';
 
 function getAdminClient() {
   if (!supabaseUrl || !supabaseServiceRoleKey) {
@@ -76,29 +80,24 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = getAdminClient();
 
-    const inviteRedirectTo = process.env.NEXT_PUBLIC_SITE_URL
-      ? `${process.env.NEXT_PUBLIC_SITE_URL}/login`
-      : undefined;
-
-    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      payload.email.trim().toLowerCase(),
-      {
-        redirectTo: inviteRedirectTo,
-        data: {
-          user_type: 'organization',
-          organization_name: payload.name,
-        },
+    const { data: createUserData, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+      email: payload.email.trim().toLowerCase(),
+      password: DEFAULT_ORGANIZATION_PASSWORD,
+      email_confirm: true,
+      user_metadata: {
+        user_type: 'organization',
+        organization_name: payload.name,
       },
-    );
+    });
 
-    if (inviteError) {
+    if (createUserError) {
       return NextResponse.json(
-        { message: `No se pudo crear/invitar el usuario en Auth: ${inviteError.message}` },
+        { message: `No se pudo crear el usuario en Auth: ${createUserError.message}` },
         { status: 400 },
       );
     }
 
-    const invitedUserId = inviteData.user?.id;
+    const invitedUserId = createUserData.user?.id;
 
     if (!invitedUserId) {
       return NextResponse.json(
@@ -107,20 +106,54 @@ export async function POST(request: Request) {
       );
     }
 
-    const fullAddress = `${payload.address}, ${payload.city}, ${payload.state}, CP ${payload.postalCode}`;
+    // Proceso 1: crear direccion
+    const { data: addressInsertData, error: addressInsertError } = await supabaseAdmin
+      .schema(appSchema)
+      .from('direccion')
+      .insert({
+        calle: payload.street,
+        num_exterior: payload.exteriorNumber,
+        num_interior: payload.interiorNumber.trim(),
+        cp: payload.postalCode,
+        entidad_federativa: payload.state,
+        ciudad_alcaldia: payload.city,
+      })
+      .select('id_direccion')
+      .single();
 
+    if (addressInsertError) {
+      await supabaseAdmin.auth.admin.deleteUser(invitedUserId);
+
+      return NextResponse.json(
+        { message: `No se pudo guardar la dirección en tabla direccion: ${addressInsertError.message}` },
+        { status: 400 },
+      );
+    }
+
+    const idDireccion = addressInsertData?.id_direccion;
+
+    if (!idDireccion) {
+      await supabaseAdmin.auth.admin.deleteUser(invitedUserId);
+
+      return NextResponse.json(
+        { message: 'No se obtuvo id_direccion después de crear la dirección.' },
+        { status: 500 },
+      );
+    }
+
+    // Proceso 2: crear OSC relacionado a direccion
     const { error: oscInsertError } = await supabaseAdmin
       .schema(appSchema)
       .from('osc')
       .insert({
         id_osc: invitedUserId,
+        id_direccion: idDireccion,
         nombre_organizacion: payload.name,
         tipo: payload.type,
         rfc: payload.rfc,
         representante: payload.legalRepresentative,
         telefono: payload.contact,
         email: payload.email.trim().toLowerCase(),
-        direccion: fullAddress,
         actividades_principales: payload.activities,
         financiamiento: payload.fundingSource,
         riesgo: 'bajo',
@@ -128,7 +161,9 @@ export async function POST(request: Request) {
       });
 
     if (oscInsertError) {
+      await supabaseAdmin.schema(appSchema).from('direccion').delete().eq('id_direccion', idDireccion);
       await supabaseAdmin.auth.admin.deleteUser(invitedUserId);
+
       return NextResponse.json(
         { message: `No se pudo guardar la organización en tabla osc: ${oscInsertError.message}` },
         { status: 400 },
@@ -138,7 +173,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       message:
-        'Organización registrada. Se envió un correo para que la organización establezca su contraseña e inicie sesión.',
+        'Organización registrada. Contraseña inicial asignada: AML123.',
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error inesperado registrando la organización.';

@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router';
-import { Shield, AlertCircle, CheckCircle, Mail } from 'lucide-react';
+import { useNavigate, Link, useLocation } from 'react-router';
+import { AlertCircle, CheckCircle, Mail } from 'lucide-react';
+import Image from 'next/image';
 import type { User } from '@supabase/supabase-js';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 
@@ -10,6 +11,7 @@ type AppUserType = 'admin' | 'organization';
 
 export function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,6 +22,7 @@ export function Login() {
   const [isRecoveryLoading, setIsRecoveryLoading] = useState(false);
 
   const appSchema = process.env.NEXT_PUBLIC_SUPABASE_APP_SCHEMA ?? 'public';
+  const authSetPasswordPath = process.env.NEXT_PUBLIC_AUTH_SET_PASSWORD_PATH ?? '/auth/set-password';
   const workerTables = (process.env.NEXT_PUBLIC_SUPABASE_WORKER_TABLES ?? 'trabajador,trabajadores')
     .split(',')
     .map((table) => table.trim())
@@ -41,6 +44,78 @@ export function Login() {
       normalizedMessage.includes('relation')
     );
   };
+
+  const normalizePath = (path: string) => (path.startsWith('/') ? path : `/${path}`);
+
+  const getOriginFromSiteUrl = () => {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+    if (!siteUrl) {
+      return undefined;
+    }
+
+    try {
+      return new URL(siteUrl).origin;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const getSetPasswordRedirectTo = () => {
+    const normalizedPath = normalizePath(authSetPasswordPath);
+
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}${normalizedPath}`;
+    }
+
+    const siteOrigin = getOriginFromSiteUrl();
+
+    if (siteOrigin) {
+      return `${siteOrigin.replace(/\/$/, '')}${normalizedPath}`;
+    }
+
+    return undefined;
+  };
+
+  const hasAuthTokensInUrl = () => {
+    const searchParams = new URLSearchParams(location.search);
+    const hashParams = new URLSearchParams(location.hash.startsWith('#') ? location.hash.slice(1) : location.hash);
+
+    const hasCode = Boolean(searchParams.get('code'));
+    const hasTokenHash = Boolean(searchParams.get('token_hash'));
+    const hasAccessToken = Boolean(hashParams.get('access_token'));
+    const hasRefreshToken = Boolean(hashParams.get('refresh_token'));
+    const hasType = Boolean(searchParams.get('type') ?? hashParams.get('type'));
+
+    return hasCode || hasTokenHash || hasAccessToken || hasRefreshToken || hasType;
+  };
+
+  useEffect(() => {
+    if (!hasAuthTokensInUrl()) {
+      return;
+    }
+
+    const nextUrl = `/auth/set-password${location.search}${location.hash}`;
+    navigate(nextUrl, { replace: true });
+  }, [location.hash, location.search, navigate]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event !== 'PASSWORD_RECOVERY') {
+        return;
+      }
+
+      navigate('/auth/set-password', { replace: true });
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [navigate]);
 
   const findUserByUuidInTable = async (tableName: string, userId: string, possibleUuidColumns: string[]) => {
     const supabase = getSupabaseClient();
@@ -155,6 +230,10 @@ export function Login() {
       return;
     }
 
+    if (hasAuthTokensInUrl()) {
+      return;
+    }
+
     const checkSession = async () => {
       try {
         const supabase = getSupabaseClient();
@@ -226,7 +305,9 @@ export function Login() {
 
     try {
       const supabase = getSupabaseClient();
-      const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(recoveryEmail.trim());
+      const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(recoveryEmail.trim(), {
+        redirectTo: getSetPasswordRedirectTo(),
+      });
 
       if (recoveryError) {
         setError(recoveryError.message);
@@ -248,20 +329,28 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+        <div className="bg-white/95 backdrop-blur-sm rounded-3xl border border-emerald-100 shadow-2xl shadow-emerald-900/10 p-8 sm:p-10">
           {/* Logo and Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-600 rounded-full mb-4">
-              <Shield className="w-8 h-8 text-white" />
+          <div className="text-center mb-8 sm:mb-10">
+            <div className="inline-flex items-center justify-center mb-5">
+              <Image
+                src="/appleseedlogo.png"
+                alt="Logo Appleseed México"
+                width={320}
+                height={128}
+                className="w-56 h-auto object-contain"
+                sizes="(max-width: 768px) 12rem, 14rem"
+                priority
+              />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Appleseed México
-            </h1>
-            <p className="text-gray-600">
-              Portal de Prevención de Lavado de Dinero
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700/90 mb-2">
+              Acceso seguro
             </p>
+            <h1 className="text-gray-700 text-base sm:text-lg font-semibold leading-relaxed">
+              Portal de Prevención de Lavado de Dinero
+            </h1>
           </div>
 
           {/* Login Form */}
@@ -275,7 +364,7 @@ export function Login() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full text-gray-700 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                className="w-full text-gray-800 px-4 py-3 border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none transition placeholder:text-gray-400"
                 placeholder="usuario@ejemplo.com"
               />
             </div>
@@ -289,7 +378,7 @@ export function Login() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full text-gray-700 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                className="w-full text-gray-800 px-4 py-3 border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none transition placeholder:text-gray-400"
                 placeholder="••••••••"
               />
             </div>
@@ -304,23 +393,23 @@ export function Login() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-medium transition duration-200 shadow-lg shadow-emerald-600/30"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-70 disabled:cursor-not-allowed text-white py-3 rounded-xl font-semibold transition duration-200 shadow-lg shadow-emerald-600/30"
             >
               {isSubmitting ? 'Iniciando sesión...' : 'Iniciar Sesión'}
             </button>
           </form>
 
-          <div className="mt-6 text-center flex items-center justify-center gap-4">
+          <div className="mt-7 pt-5 border-t border-gray-100 text-center flex items-center justify-center gap-4">
             <button
               onClick={() => setShowRecovery(true)}
-              className="text-sm text-emerald-600 hover:text-emerald-700"
+              className="text-sm font-medium text-emerald-700 hover:text-emerald-800"
             >
               ¿Olvidaste tu contraseña?
             </button>
             <span className="text-gray-400">•</span>
             <Link
               to="/register"
-              className="text-sm text-emerald-600 hover:text-emerald-700"
+              className="text-sm font-medium text-emerald-700 hover:text-emerald-800"
             >
               Registrar Organización
             </Link>
@@ -335,8 +424,8 @@ export function Login() {
 
       {/* Password Recovery Modal */}
       {showRecovery && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8">
+        <div className="fixed inset-0 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl border border-emerald-100 shadow-2xl max-w-md w-full p-8">
             {!recoverySuccess ? (
               <>
                 <div className="text-center mb-6">
@@ -361,7 +450,7 @@ export function Login() {
                       required
                       value={recoveryEmail}
                       onChange={(e) => setRecoveryEmail(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-800 focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none"
                       placeholder="tu@correo.com"
                     />
                   </div>
@@ -373,14 +462,14 @@ export function Login() {
                         setShowRecovery(false);
                         setRecoveryEmail('');
                       }}
-                      className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition"
+                      className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
                       disabled={isRecoveryLoading}
-                      className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition"
+                      className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition disabled:opacity-70"
                     >
                       {isRecoveryLoading ? 'Enviando...' : 'Enviar Enlace'}
                     </button>

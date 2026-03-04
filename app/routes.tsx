@@ -14,6 +14,7 @@ import { Messages } from "./components/Messages";
 import { OrganizationProfile } from "./components/OrganizationProfile";
 import { DonationPage } from "./components/DonationPage";
 import { OrganizationRegister } from "./components/OrganizationRegister";
+import { SetPassword } from "./components/SetPassword";
 
 export const router = createBrowserRouter([
   {
@@ -25,8 +26,16 @@ export const router = createBrowserRouter([
     Component: OrganizationRegister,
   },
   {
-    path: "/donate/:organizationId",
+    path: "/donate/:id_organizacion",
     Component: DonationPage,
+  },
+  {
+    path: "/donacion/:id_organizacion",
+    Component: DonationPage,
+  },
+  {
+    path: "/auth/set-password",
+    Component: SetPassword,
   },
   {
     path: "/",
