@@ -29,5 +29,9 @@ export class DirectionModel implements IDirection {
 
     }
 
+    formatAddress(): string {
+        return `${this.calle} ${this.num_exterior}${this.num_interior ? ' Int. ' + this.num_interior : ''}, ${this.ciudad_alcaldia}, ${this.entidad_federativa}, CP ${this.cp}`
+    }
+
 }
 
