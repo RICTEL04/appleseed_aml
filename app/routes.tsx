@@ -12,6 +12,7 @@ import { Announcements } from "./components/Announcements";
 import { Documents } from "./components/Documents";
 import { Messages } from "./components/Messages";
 import { OrganizationProfile } from "./components/OrganizationProfile";
+import { OrganizationDonations } from "./components/OrganizationDonations";
 import { DonationPage } from "./components/DonationPage";
 import { OrganizationRegister } from "./components/OrganizationRegister";
 import { SetPassword } from "./components/SetPassword";
@@ -51,10 +52,11 @@ export const router = createBrowserRouter([
     Component: OrganizationLayout,
     children: [
       { index: true, Component: OrganizationDashboard },
-      { path: "profile", Component: OrganizationProfile },
+      { path: "donations", Component: OrganizationDonations },
       { path: "announcements", Component: Announcements },
       { path: "documents", Component: Documents },
       { path: "messages", Component: Messages },
+      { path: "profile", Component: OrganizationProfile },
     ],
   },
 ]);
