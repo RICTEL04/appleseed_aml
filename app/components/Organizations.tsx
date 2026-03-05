@@ -121,9 +121,9 @@ export function Organizations() {
                             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none appearance-none bg-white"
                         >
                             <option value="all">Todos los estados</option>
-                            <option value="Verificada">Verificada</option>
-                            <option value="En revisión">En revisión</option>
-                            <option value="Pendiente">Pendiente</option>
+                            <option value="verificada">Verificada</option>
+                            <option value="en revisión">En revisión</option>
+                            <option value="pendiente">Pendiente</option>
                         </select>
                     </div>
                 </div>
