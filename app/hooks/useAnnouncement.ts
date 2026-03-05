@@ -90,6 +90,7 @@ export function useAnnouncement(){
     const createAnnouncement = useCallback(async (announcement: AnnouncementModel) => {
         try {
             setLoading(true);
+            console.log('[useAnnouncement] creating announcement =>', announcement);
             const created = await announcementRepository.create(announcement);
             setAnnouncements((prev) => [...prev, created]);
             return created;
@@ -103,6 +104,26 @@ export function useAnnouncement(){
         }
     }, []);
 
-    return { loading, error, announcements, fetchAnnouncements, updateAnnouncement, createAnnouncement };
+    const createManyAnnouncements = useCallback(async (announcements: AnnouncementModel[]) => {
+        try {
+            setLoading(true);
+            const created = await announcementRepository.createMany(announcements);
+            setAnnouncements((prev) => [...prev, ...created]);
+            return created;
+        } catch (err) {
+            console.error('[useAnnouncement] createMany error:', err);
+            setError('Failed to create announcements');
+            return [];
+        }
+        finally {
+            setLoading(false);
+        }
+    }, []);
+
+    return { loading, error, announcements, 
+            fetchAnnouncements, 
+            updateAnnouncement, 
+            createAnnouncement, 
+            createManyAnnouncements };
 
  }

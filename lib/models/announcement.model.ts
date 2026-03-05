@@ -25,8 +25,7 @@ export class AnnouncementModel implements IAnnouncement {
   categoria: string
   urgencia: string
 
-  // Optional relation
-  organization?: OrganizationModel
+
 
   constructor(data: IAnnouncement) {
     this.id_aviso = data.id_aviso
