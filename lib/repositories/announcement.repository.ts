@@ -47,6 +47,24 @@ export class AnnouncementRepository{
         return new AnnouncementModel(data)
     }
 
+    async createMany(announcements: IAnnouncement[]): Promise<AnnouncementModel[]> {
+        const supabase = getSupabaseClient();
+        const results: AnnouncementModel[] = [];
+        for (const announcement of announcements) {
+            const { data, error } = await supabase
+                .from('avisos')
+                .insert(announcement)
+                .select()
+                .single();
+            if (error) {
+                console.error('Error creating announcement:', error);
+                throw new Error('Failed to create announcement');
+            }
+            results.push(new AnnouncementModel(data));
+        }
+        return results;
+    }
+
 }
 
 export const announcementRepository = new AnnouncementRepository();
