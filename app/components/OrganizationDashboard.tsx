@@ -1,80 +1,404 @@
-import { CheckCircle2, Clock, AlertTriangle, FileText, Bell, MessageSquare } from 'lucide-react';
+"use client";
+
+import { useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, Clock, AlertTriangle, FileText, Bell, ShieldAlert } from 'lucide-react';
 import { Link } from 'react-router';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 
-const stats = [
-  {
-    label: 'Documentos Pendientes',
-    value: '3',
-    icon: Clock,
-    color: 'orange',
-    description: 'Documentos por entregar',
-  },
-  {
-    label: 'Documentos Aprobados',
-    value: '12',
-    icon: CheckCircle2,
-    color: 'green',
-    description: 'Total de documentos',
-  },
-  {
-    label: 'Avisos No Leídos',
-    value: '2',
-    icon: Bell,
-    color: 'blue',
-    description: 'Nuevos avisos',
-  },
-  {
-    label: 'Mensajes Nuevos',
-    value: '1',
-    icon: MessageSquare,
-    color: 'purple',
-    description: 'Sin responder',
-  },
-];
+type DocumentStatus = 'approved' | 'pending' | 'overdue' | 'in_review' | 'rejected';
 
-const recentAnnouncements = [
-  {
-    id: 1,
-    title: 'Actualización de Políticas AML',
-    date: '2026-02-18',
-    priority: 'high',
-    excerpt: 'Nueva regulación sobre reportes trimestrales de actividades...',
-  },
-  {
-    id: 2,
-    title: 'Fecha límite para documentos Q1',
-    date: '2026-02-15',
-    priority: 'medium',
-    excerpt: 'Recordatorio: Los documentos del primer trimestre deben ser entregados...',
-  },
-];
+interface DashboardDocument {
+  id: string;
+  nombre_documento: string | null;
+  vencimiento: string | null;
+  estado: string | null;
+}
 
-const upcomingDeadlines = [
-  {
-    id: 1,
-    document: 'Reporte Trimestral Q1 2026',
-    dueDate: '2026-02-28',
-    status: 'pending',
-    daysLeft: 8,
-  },
-  {
-    id: 2,
-    document: 'Estados Financieros Enero',
-    dueDate: '2026-02-25',
-    status: 'pending',
-    daysLeft: 5,
-  },
-  {
-    id: 3,
-    document: 'Certificado de Donaciones',
-    dueDate: '2026-03-05',
-    status: 'pending',
-    daysLeft: 13,
-  },
-];
+interface DashboardAnnouncement {
+  estado: string | null;
+}
+
+interface DashboardAlert {
+  id: string;
+  umbral: number;
+  created_at: string | null;
+}
+
+interface DashboardDonation {
+  id_donacion: string;
+  created_at: string;
+  cantidad: number | null;
+}
+
+interface OscProfile {
+  nombre_organizacion: string | null;
+  estado_verificacion: string | null;
+  riesgo: string | null;
+}
+
+const normalizeStatus = (status: string | null): DocumentStatus => {
+  const normalized = (status ?? '').trim().toLowerCase();
+
+  if (normalized === 'aprobado' || normalized === 'approved') return 'approved';
+  if (normalized === 'en revision' || normalized === 'en revisión' || normalized === 'in_review') return 'in_review';
+  if (normalized === 'rechazado' || normalized === 'rejected') return 'rejected';
+  if (normalized === 'vencido' || normalized === 'overdue' || normalized === 'atrasado' || normalized === 'late') return 'overdue';
+
+  return 'pending';
+};
+
+const getDaysUntilDate = (date: string) => {
+  const today = new Date();
+  const targetDate = new Date(date);
+
+  today.setHours(0, 0, 0, 0);
+  targetDate.setHours(0, 0, 0, 0);
+
+  return Math.ceil((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const getHoursUntilDate = (date: string) => {
+  const now = new Date();
+  const targetDate = new Date(date);
+  const diffTime = targetDate.getTime() - now.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60));
+};
+
+const formatCurrency = (amount: number) =>
+  amount.toLocaleString('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 export function OrganizationDashboard() {
-  const organizationName = localStorage.getItem('organization_name') || '';
+  const [organizationId, setOrganizationId] = useState<string>('');
+  const [organizationName, setOrganizationName] = useState('Organización');
+  const [organizationProfile, setOrganizationProfile] = useState<OscProfile | null>(null);
+  const [documents, setDocuments] = useState<DashboardDocument[]>([]);
+  const [announcements, setAnnouncements] = useState<DashboardAnnouncement[]>([]);
+  const [amlAlerts, setAmlAlerts] = useState<DashboardAlert[]>([]);
+  const [donations, setDonations] = useState<DashboardDonation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const storedOrganizationId = localStorage.getItem('organization_id') || '';
+    const storedOrganizationName = localStorage.getItem('organization_name') || 'Organización';
+
+    setOrganizationId(storedOrganizationId);
+    setOrganizationName(storedOrganizationName);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDashboardData = async () => {
+      if (!organizationId) {
+        if (isMounted) {
+          setLoading(false);
+          setLoadingError('No se encontró la organización activa.');
+        }
+        return;
+      }
+
+      if (!isSupabaseConfigured) {
+        if (isMounted) {
+          setLoading(false);
+          setLoadingError('Supabase no está configurado para consultar el dashboard.');
+        }
+        return;
+      }
+
+      setLoading(true);
+      setLoadingError(null);
+
+      try {
+        const supabase = getSupabaseClient();
+
+        const [oscResponse, documentsResponse, announcementsResponse, amlAlertsResponse, donationsResponse] = await Promise.all([
+          supabase
+            .from('osc')
+            .select('nombre_organizacion, estado_verificacion, riesgo')
+            .eq('id_osc', organizationId)
+            .maybeSingle(),
+          supabase
+            .from('documentos')
+            .select('id, nombre_documento, vencimiento, estado')
+            .eq('id_osc', organizationId),
+          supabase
+            .from('avisos')
+            .select('estado')
+            .eq('id_osc', organizationId)
+            .order('fecha', { ascending: false })
+            .limit(100),
+          supabase
+            .from('alertas_aml')
+            .select('id, umbral, created_at')
+            .eq('id_osc', organizationId)
+            .order('created_at', { ascending: false })
+            .limit(20),
+          supabase
+            .from('donaciones')
+            .select('id_donacion, created_at, cantidad')
+            .eq('id_osc', organizationId)
+            .order('created_at', { ascending: false }),
+        ]);
+
+        if (oscResponse.error) throw oscResponse.error;
+        if (documentsResponse.error) throw documentsResponse.error;
+        if (announcementsResponse.error) throw announcementsResponse.error;
+        if (amlAlertsResponse.error) throw amlAlertsResponse.error;
+        if (donationsResponse.error) throw donationsResponse.error;
+
+        if (!isMounted) return;
+
+        const oscData = (oscResponse.data as OscProfile | null) ?? null;
+
+        setOrganizationProfile(oscData);
+        setOrganizationName(oscData?.nombre_organizacion?.trim() || localStorage.getItem('organization_name') || 'Organización');
+        setDocuments((documentsResponse.data ?? []) as DashboardDocument[]);
+        setAnnouncements((announcementsResponse.data ?? []) as DashboardAnnouncement[]);
+        setAmlAlerts((amlAlertsResponse.data ?? []) as DashboardAlert[]);
+        setDonations((donationsResponse.data ?? []) as DashboardDonation[]);
+      } catch (error) {
+        if (!isMounted) return;
+        const message = error instanceof Error ? error.message : 'No fue posible cargar el dashboard.';
+        setLoadingError(message);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadDashboardData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [organizationId]);
+
+  const { pendingCount, approvedCount, inReviewCount, overdueCount } = useMemo(() => {
+    const counters = {
+      pendingCount: 0,
+      approvedCount: 0,
+      inReviewCount: 0,
+      overdueCount: 0,
+    };
+
+    documents.forEach((document) => {
+      const normalizedStatus = normalizeStatus(document.estado);
+      if (normalizedStatus === 'approved') counters.approvedCount += 1;
+      if (normalizedStatus === 'in_review') counters.inReviewCount += 1;
+      if (normalizedStatus === 'pending') counters.pendingCount += 1;
+      if (normalizedStatus === 'overdue') {
+        counters.overdueCount += 1;
+        counters.pendingCount += 1;
+      }
+    });
+
+    return counters;
+  }, [documents]);
+
+  const unreadAnnouncementsCount = useMemo(() => announcements
+    .filter((announcement) => (announcement.estado ?? '').trim().toLowerCase() !== 'leido').length, [announcements]);
+
+  const documentsStatusChartData = useMemo(() => {
+    const totalRejected = documents.filter((document) => normalizeStatus(document.estado) === 'rejected').length;
+
+    return [
+      { name: 'Pendientes', value: pendingCount, color: 'var(--color-orange-500)' },
+      { name: 'En revisión', value: inReviewCount, color: 'var(--color-blue-500)' },
+      { name: 'Aprobados', value: approvedCount, color: 'var(--color-emerald-500)' },
+      { name: 'Rechazados', value: totalRejected, color: 'var(--color-rose-500)' },
+    ].filter((entry) => entry.value > 0);
+  }, [documents, pendingCount, inReviewCount, approvedCount]);
+
+  const monthlyTrendData = useMemo(() => {
+    const baseDate = new Date();
+    const monthKeys: string[] = [];
+
+    for (let index = 5; index >= 0; index -= 1) {
+      const currentDate = new Date(baseDate.getFullYear(), baseDate.getMonth() - index, 1);
+      monthKeys.push(`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`);
+    }
+
+    const monthlyAccumulator = monthKeys.reduce<Record<string, { donations: number; alerts: number }>>((accumulator, key) => {
+      accumulator[key] = { donations: 0, alerts: 0 };
+      return accumulator;
+    }, {});
+
+    donations.forEach((donation) => {
+      const donationDate = new Date(donation.created_at);
+      const key = `${donationDate.getFullYear()}-${String(donationDate.getMonth() + 1).padStart(2, '0')}`;
+      if (monthlyAccumulator[key]) {
+        monthlyAccumulator[key].donations += Number(donation.cantidad ?? 0);
+      }
+    });
+
+    amlAlerts.forEach((alert) => {
+      if (!alert.created_at) return;
+      const alertDate = new Date(alert.created_at);
+      const key = `${alertDate.getFullYear()}-${String(alertDate.getMonth() + 1).padStart(2, '0')}`;
+      if (monthlyAccumulator[key]) {
+        monthlyAccumulator[key].alerts += 1;
+      }
+    });
+
+    return monthKeys.map((key) => {
+      const [year, month] = key.split('-');
+      const label = new Date(Number(year), Number(month) - 1, 1).toLocaleDateString('es-MX', {
+        month: 'short',
+      });
+
+      return {
+        month: label.charAt(0).toUpperCase() + label.slice(1),
+        donaciones: Number(monthlyAccumulator[key].donations.toFixed(2)),
+        alertas: monthlyAccumulator[key].alerts,
+      };
+    });
+  }, [donations, amlAlerts]);
+
+  const upcomingDeadlines = useMemo(() => documents
+    .filter((document) => Boolean(document.vencimiento))
+    .map((document) => {
+      const dueDate = document.vencimiento as string;
+      const hoursLeft = getHoursUntilDate(dueDate);
+      return {
+        id: document.id,
+        document: document.nombre_documento?.trim() || 'Documento sin nombre',
+        dueDate,
+        status: normalizeStatus(document.estado),
+        daysLeft: getDaysUntilDate(dueDate),
+        hoursLeft,
+      };
+    })
+    .filter((document) => document.status === 'pending' || document.status === 'overdue')
+    .sort((first, second) => new Date(first.dueDate).getTime() - new Date(second.dueDate).getTime())
+    .slice(0, 3), [documents]);
+
+  const totalDocuments = documents.length;
+  const compliancePercentage = totalDocuments > 0
+    ? Math.round((approvedCount / totalDocuments) * 100)
+    : 0;
+
+  const latestAmlAlert = amlAlerts[0] ?? null;
+
+  const donationMetrics = useMemo(() => {
+    const totalDonationsAmount = donations.reduce((accumulator, donation) => accumulator + Number(donation.cantidad ?? 0), 0);
+    const donationsCount = donations.length;
+    const averageDonation = donationsCount > 0 ? totalDonationsAmount / donationsCount : 0;
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const currentMonthAmount = donations.reduce((accumulator, donation) => {
+      const donationDate = new Date(donation.created_at);
+      if (donationDate.getMonth() === currentMonth && donationDate.getFullYear() === currentYear) {
+        return accumulator + Number(donation.cantidad ?? 0);
+      }
+      return accumulator;
+    }, 0);
+
+    return {
+      totalDonationsAmount,
+      averageDonation,
+      currentMonthAmount,
+      donationsCount,
+    };
+  }, [donations]);
+
+  const amlByThresholdChartData = useMemo(() => {
+    const grouped = amlAlerts.reduce<Record<string, number>>((accumulator, alert) => {
+      const key = alert.umbral === 1 ? 'Umbral 1' : alert.umbral === 2 ? 'Umbral 2' : `Umbral ${alert.umbral}`;
+      accumulator[key] = (accumulator[key] ?? 0) + 1;
+      return accumulator;
+    }, {});
+
+    return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+  }, [amlAlerts]);
+
+  const operationVolumeChartData = useMemo(() => ([
+    { name: 'Documentos', total: documents.length },
+    { name: 'Avisos', total: announcements.length },
+    { name: 'Alertas AML', total: amlAlerts.length },
+    { name: 'Donaciones', total: donations.length },
+  ]), [documents.length, announcements.length, amlAlerts.length, donations.length]);
+
+  const summaryQuickActions = [
+    {
+      label: 'Documentos Pendientes',
+      value: String(pendingCount),
+      icon: Clock,
+      color: 'orange',
+      description: overdueCount > 0 ? `${overdueCount} con atraso` : 'Sin atrasos críticos',
+      to: '/organization/documents',
+    },
+    {
+      label: 'Documentos Aprobados',
+      value: String(approvedCount),
+      icon: CheckCircle2,
+      color: 'green',
+      description: `De ${totalDocuments} documentos`,
+      to: '/organization/documents',
+    },
+    {
+      label: 'Avisos No Leídos',
+      value: String(unreadAnnouncementsCount),
+      icon: Bell,
+      color: 'blue',
+      description: 'Nuevos avisos por revisar',
+      to: '/organization/announcements',
+    },
+    {
+      label: 'Alertas AML',
+      value: String(amlAlerts.length),
+      icon: ShieldAlert,
+      color: 'purple',
+      description: latestAmlAlert ? `Último umbral: ${latestAmlAlert.umbral}` : 'Sin alertas registradas',
+      to: '/organization/donations',
+    },
+  ] as const;
+
+  const hasUpcomingDeadlines = upcomingDeadlines.length > 0;
+
+  const renderQuickActionsCard = () => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <h2 className="text-lg font-semibold text-gray-900 mb-4">Acciones Rápidas</h2>
+      <div className="space-y-3">
+        {summaryQuickActions.map((action) => {
+          const Icon = action.icon;
+          const colorClasses = {
+            orange: 'bg-orange-100 text-orange-600',
+            green: 'bg-emerald-100 text-emerald-600',
+            blue: 'bg-blue-100 text-blue-600',
+            purple: 'bg-purple-100 text-purple-600',
+          }[action.color];
+
+          return (
+            <Link
+              key={action.label}
+              to={action.to}
+              className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:border-emerald-600 hover:bg-emerald-50 transition group"
+            >
+              <div className={`w-9 h-9 ${colorClasses} rounded-lg flex items-center justify-center transition`}>
+                <Icon className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium text-gray-900 text-sm">{action.label}</p>
+                <p className="text-xl leading-tight font-bold text-gray-900">{action.value}</p>
+                <p className="text-xs text-gray-600">{action.description}</p>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -86,75 +410,32 @@ export function OrganizationDashboard() {
         <p className="text-emerald-50">
           Mantén tu organización en cumplimiento con las regulaciones AML
         </p>
+        {organizationProfile && (
+          <div className="mt-3 text-sm text-emerald-100 flex flex-wrap gap-x-4 gap-y-1">
+            <span>Verificación: {organizationProfile.estado_verificacion?.trim() || 'Sin estado'}</span>
+            <span>Riesgo: {organizationProfile.riesgo?.trim() || 'No definido'}</span>
+          </div>
+        )}
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          const colorClasses = {
-            orange: 'bg-orange-100 text-orange-600',
-            green: 'bg-emerald-100 text-emerald-600',
-            blue: 'bg-blue-100 text-blue-600',
-            purple: 'bg-purple-100 text-purple-600',
-          }[stat.color];
-
-          return (
-            <div key={stat.label} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`w-12 h-12 ${colorClasses} rounded-lg flex items-center justify-center`}>
-                  <Icon className="w-6 h-6" />
-                </div>
-              </div>
-              <p className="text-gray-600 text-sm mb-1">{stat.label}</p>
-              <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
-              <p className="text-gray-500 text-sm mt-2">{stat.description}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Announcements */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-gray-900">Avisos Recientes</h2>
-            <Link
-              to="/organization/announcements"
-              className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
-            >
-              Ver todos
-            </Link>
-          </div>
-          <div className="space-y-4">
-            {recentAnnouncements.map((announcement) => (
-              <div
-                key={announcement.id}
-                className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition cursor-pointer"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-medium text-gray-900">{announcement.title}</h3>
-                  {announcement.priority === 'high' && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                      Urgente
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-gray-600 mb-2">{announcement.excerpt}</p>
-                <p className="text-xs text-gray-500">
-                  {new Date(announcement.date).toLocaleDateString('es-MX', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
-                </p>
-              </div>
-            ))}
-          </div>
+      {loading && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-sm text-gray-600">
+          Cargando información del dashboard...
         </div>
+      )}
 
-        {/* Upcoming Deadlines */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      {loadingError && !loading && (
+        <div className="bg-red-50 rounded-xl shadow-sm border border-red-200 p-6 text-sm text-red-700">
+          {loadingError}
+        </div>
+      )}
+
+      {!loading && !loadingError && (
+        <>
+
+      {hasUpcomingDeadlines && (
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-gray-900">Próximos Vencimientos</h2>
             <Link
@@ -164,11 +445,13 @@ export function OrganizationDashboard() {
               Ver documentos
             </Link>
           </div>
+          <p className="text-sm text-gray-600 mb-4">Haz clic en un vencimiento para abrir el módulo de documentos.</p>
           <div className="space-y-4">
             {upcomingDeadlines.map((deadline) => (
-              <div
+              <Link
                 key={deadline.id}
-                className="flex items-start gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+                to="/organization/documents"
+                className="flex items-start gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-emerald-300 transition cursor-pointer"
               >
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
                   deadline.daysLeft <= 5 ? 'bg-red-100' : 'bg-orange-100'
@@ -187,59 +470,136 @@ export function OrganizationDashboard() {
                   <p className={`text-xs font-medium mt-1 ${
                     deadline.daysLeft <= 5 ? 'text-red-600' : 'text-orange-600'
                   }`}>
-                    {deadline.daysLeft} días restantes
+                    {deadline.hoursLeft > 0 && deadline.hoursLeft < 24
+                      ? `${deadline.hoursLeft} hora(s) restantes`
+                      : deadline.hoursLeft <= 0 && deadline.hoursLeft > -24
+                        ? `${Math.abs(deadline.hoursLeft)} hora(s) de atraso`
+                        : deadline.daysLeft < 0
+                          ? `${Math.abs(deadline.daysLeft)} día(s) de atraso`
+                          : `${deadline.daysLeft} días restantes`}
                   </p>
                 </div>
-              </div>
+              </Link>
             ))}
+            {upcomingDeadlines.length === 0 && (
+              <p className="text-sm text-gray-500">No hay vencimientos pendientes por ahora.</p>
+            )}
+          </div>
+        </div>
+
+        {renderQuickActionsCard()}
+      </div>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+        <div className="xl:col-span-3 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Resumen Financiero</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs text-gray-500 mb-1">Total Donado Histórico</p>
+              <p className="text-xl font-bold text-gray-900">{formatCurrency(donationMetrics.totalDonationsAmount)}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs text-gray-500 mb-1">Promedio por Donación</p>
+              <p className="text-xl font-bold text-gray-900">{formatCurrency(donationMetrics.averageDonation)}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs text-gray-500 mb-1">Donado este Mes</p>
+              <p className="text-xl font-bold text-gray-900">{formatCurrency(donationMetrics.currentMonthAmount)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Alertas por Umbral</h2>
+          <div className="h-48">
+            {amlByThresholdChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={amlByThresholdChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-gray-200)" />
+                  <XAxis dataKey="name" stroke="var(--color-gray-500)" />
+                  <YAxis stroke="var(--color-gray-500)" allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="value" name="Alertas" fill="var(--color-purple-500)" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                Sin alertas AML en el periodo.
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-6">Acciones Rápidas</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Link
-            to="/organization/documents"
-            className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-emerald-600 hover:bg-emerald-50 transition group"
-          >
-            <div className="w-10 h-10 bg-emerald-100 group-hover:bg-emerald-600 rounded-lg flex items-center justify-center transition">
-              <FileText className="w-5 h-5 text-emerald-600 group-hover:text-white transition" />
-            </div>
-            <div>
-              <p className="font-medium text-gray-900">Subir Documento</p>
-              <p className="text-xs text-gray-600">Cargar archivos requeridos</p>
-            </div>
-          </Link>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Tendencia 6 Meses</h2>
+          <p className="text-sm text-gray-600 mb-4">Compara montos de donación contra alertas AML generadas</p>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyTrendData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-gray-200)" />
+                <XAxis dataKey="month" stroke="var(--color-gray-500)" />
+                <YAxis yAxisId="left" stroke="var(--color-gray-500)" />
+                <YAxis yAxisId="right" orientation="right" stroke="var(--color-gray-500)" allowDecimals={false} />
+                <Tooltip />
+                <Bar yAxisId="left" dataKey="donaciones" name="Donaciones (MXN)" fill="var(--color-emerald-500)" radius={[6, 6, 0, 0]} />
+                <Bar yAxisId="right" dataKey="alertas" name="Alertas AML" fill="var(--color-amber-500)" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-          <Link
-            to="/organization/announcements"
-            className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-emerald-600 hover:bg-emerald-50 transition group"
-          >
-            <div className="w-10 h-10 bg-blue-100 group-hover:bg-blue-600 rounded-lg flex items-center justify-center transition">
-              <Bell className="w-5 h-5 text-blue-600 group-hover:text-white transition" />
-            </div>
-            <div>
-              <p className="font-medium text-gray-900">Ver Avisos</p>
-              <p className="text-xs text-gray-600">Comunicados importantes</p>
-            </div>
-          </Link>
-
-          <Link
-            to="/organization/messages"
-            className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-emerald-600 hover:bg-emerald-50 transition group"
-          >
-            <div className="w-10 h-10 bg-purple-100 group-hover:bg-purple-600 rounded-lg flex items-center justify-center transition">
-              <MessageSquare className="w-5 h-5 text-purple-600 group-hover:text-white transition" />
-            </div>
-            <div>
-              <p className="font-medium text-gray-900">Mensajes</p>
-              <p className="text-xs text-gray-600">Comunicación directa</p>
-            </div>
-          </Link>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Distribución de Documentos</h2>
+          <p className="text-sm text-gray-600 mb-4">Estado actual de la carga documental de la organización</p>
+          <div className="h-72">
+            {documentsStatusChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={documentsStatusChartData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label={({ name, percent }) => `${name} ${percent ? (percent * 100).toFixed(0) : 0}%`}
+                  >
+                    {documentsStatusChartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                No hay datos documentales para graficar.
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Volumen Operativo</h2>
+        <p className="text-sm text-gray-600 mb-4">Comparativo de registros cargados en cada módulo</p>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={operationVolumeChartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-gray-200)" />
+              <XAxis dataKey="name" stroke="var(--color-gray-500)" />
+              <YAxis stroke="var(--color-gray-500)" allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="total" name="Registros" fill="var(--color-teal-500)" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {!hasUpcomingDeadlines && renderQuickActionsCard()}
 
       {/* Compliance Status */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -248,10 +608,10 @@ export function OrganizationDashboard() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700">Documentación Completa</span>
-              <span className="text-sm font-medium text-emerald-600">80%</span>
+              <span className="text-sm font-medium text-emerald-600">{compliancePercentage}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div className="bg-emerald-600 h-2 rounded-full" style={{ width: '80%' }}></div>
+              <div className="bg-emerald-600 h-2 rounded-full" style={{ width: `${compliancePercentage}%` }}></div>
             </div>
           </div>
           <div className="flex items-start gap-3 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -261,12 +621,30 @@ export function OrganizationDashboard() {
                 Atención Requerida
               </p>
               <p className="text-sm text-yellow-700">
-                Tienes 3 documentos pendientes de entrega. Por favor, revisa la sección de documentos para mantener tu cumplimiento al día.
+                {pendingCount > 0
+                  ? `Tienes ${pendingCount} documento(s) pendiente(s) o atrasado(s). Revisa la sección de documentos para mantener tu cumplimiento al día.`
+                  : 'No hay documentos pendientes. Mantén tu monitoreo activo para conservar el cumplimiento.'}
               </p>
             </div>
           </div>
+          {inReviewCount > 0 && (
+            <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <FileText className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-blue-900 mb-1">
+                  Documentos en Revisión
+                </p>
+                <p className="text-sm text-blue-700">
+                  Actualmente tienes {inReviewCount} documento(s) en revisión por parte del equipo de cumplimiento.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+        </>
+      )}
     </div>
   );
 }
