@@ -85,6 +85,7 @@ export function DonationPage() {
   const [transactionId, setTransactionId] = useState('');
   const [pendingTransactionId, setPendingTransactionId] = useState('');
   const [emailDeliveryWarning, setEmailDeliveryWarning] = useState('');
+  const [noticeCreationWarning, setNoticeCreationWarning] = useState('');
   const [satValidationStatus, setSatValidationStatus] = useState<'idle' | 'validating' | 'passed' | 'blocked'>('idle');
   const [validationError, setValidationError] = useState('');
   const [validationMessage, setValidationMessage] = useState('');
@@ -901,6 +902,40 @@ export function DonationPage() {
     }
   };
 
+  const createDonationNotice = async () => {
+    if (!isSupabaseConfigured || !organizationParam) {
+      throw new Error('No se pudo registrar el aviso de donación.');
+    }
+
+    const amountValue = Number.parseFloat(String(selectedAmount).replace(',', '.'));
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      throw new Error('Monto inválido para registrar aviso de donación.');
+    }
+
+    const donorName = `${donorData.firstName} ${donorData.lastName} ${donorData.secondLastName}`.trim() || 'Donante';
+    const amountFormatted = amountValue.toLocaleString('es-MX', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('avisos')
+      .insert({
+        titulo: 'donacion recibida',
+        mensaje: `Se recibió una donación de $${amountFormatted} MXN de ${donorName}.`,
+        remitente: 'Sistema',
+        estado: 'no leido',
+        urgencia: 'baja',
+        categoria: 'donacion',
+        id_osc: organizationParam,
+      });
+
+    if (error) {
+      throw new Error(error.message || 'No se pudo registrar el aviso de donación.');
+    }
+  };
+
   const registerDonor = async () => {
     if (!isSupabaseConfigured) {
       throw new Error('No se pudo conectar con Supabase para registrar al donante.');
@@ -1333,6 +1368,7 @@ export function DonationPage() {
 
     try {
       setEmailDeliveryWarning('');
+      setNoticeCreationWarning('');
       const paymentAccountId = await persistOnlinePaymentMethod();
 
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -1342,6 +1378,15 @@ export function DonationPage() {
       setTransactionId(generatedTransactionId);
 
       await persistDonationRecord(generatedTransactionId, paymentAccountId);
+
+      try {
+        await createDonationNotice();
+      } catch (noticeError) {
+        const noticeErrorMessage = noticeError instanceof Error
+          ? noticeError.message
+          : 'Error desconocido creando aviso.';
+        setNoticeCreationWarning(`La donación se registró, pero no fue posible crear el aviso automático. ${noticeErrorMessage}`);
+      }
 
       try {
         await sendDonationConfirmationEmail(generatedTransactionId);
@@ -1431,6 +1476,7 @@ export function DonationPage() {
       });
       setPendingTransactionId('');
       setEmailDeliveryWarning('');
+      setNoticeCreationWarning('');
       setHomeView('options');
       setDonationHistory([]);
       setSatValidationStatus('idle');
@@ -1533,6 +1579,11 @@ export function DonationPage() {
           {emailDeliveryWarning && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-left">
               <p className="text-sm text-amber-800">{emailDeliveryWarning}</p>
+            </div>
+          )}
+          {noticeCreationWarning && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-left">
+              <p className="text-sm text-amber-800">{noticeCreationWarning}</p>
             </div>
           )}
           <Heart className="w-12 h-12 text-red-500 mx-auto mb-4" />
