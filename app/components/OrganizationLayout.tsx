@@ -2,37 +2,145 @@
 
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, Link, useLocation } from 'react-router';
-import { LayoutDashboard, Bell, FileText, MessageSquare, LogOut, Menu, User, CircleDollarSign} from 'lucide-react';
+import { LayoutDashboard, Bell, FileText, LogOut, Menu, User, CircleDollarSign} from 'lucide-react';
 import Image from 'next/image';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
+import { OrganizationNotificationPanel } from './OrganizationNotificationPanel';
 
 export function OrganizationLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [organizationName, setOrganizationName] = useState('');
+  const appSchema = process.env.NEXT_PUBLIC_SUPABASE_APP_SCHEMA ?? 'public';
 
-  useEffect(() => {
-    const auth = localStorage.getItem('appleseed_auth');
-    const userType = localStorage.getItem('user_type');
-    const orgName = localStorage.getItem('organization_name');
-    
-    if (!auth || userType !== 'organization') {
-      navigate('/login');
-    } else {
-      setOrganizationName(orgName || '');
-    }
-  }, [navigate]);
-
-  const handleLogout = async () => {
-    if (isSupabaseConfigured) {
-      await getSupabaseClient().auth.signOut();
-    }
-
+  const clearLocalSession = () => {
     localStorage.removeItem('appleseed_auth');
     localStorage.removeItem('user_type');
     localStorage.removeItem('organization_id');
     localStorage.removeItem('organization_name');
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const validateOrganizationSession = async () => {
+      const storedAuth = localStorage.getItem('appleseed_auth');
+      const storedUserType = localStorage.getItem('user_type');
+      const storedOrganizationId = localStorage.getItem('organization_id') || '';
+      const storedOrganizationName = localStorage.getItem('organization_name') || 'Organización';
+
+      if (!isSupabaseConfigured) {
+        if (!storedAuth || storedUserType !== 'organization') {
+          navigate('/login');
+          return;
+        }
+
+        setOrganizationName(storedOrganizationName);
+        return;
+      }
+
+      try {
+        const supabase = getSupabaseClient();
+        const [{ data: sessionData, error: sessionError }, { data: userData, error: userError }] = await Promise.all([
+          supabase.auth.getSession(),
+          supabase.auth.getUser(),
+        ]);
+
+        const activeUser = userData.user ?? sessionData.session?.user;
+
+        if (sessionError || userError || !activeUser) {
+          clearLocalSession();
+          if (isMounted) {
+            navigate('/login');
+          }
+          return;
+        }
+
+        if (storedUserType && storedUserType !== 'organization') {
+          clearLocalSession();
+          if (isMounted) {
+            navigate('/login');
+          }
+          return;
+        }
+
+        const candidateOrganizationIds = [storedOrganizationId, activeUser.id].filter(
+          (value, index, values) => Boolean(value) && values.indexOf(value) === index,
+        ) as string[];
+
+        let resolvedOrganizationId = storedOrganizationId || activeUser.id;
+        let resolvedOrganizationName = storedOrganizationName;
+
+        for (const candidateId of candidateOrganizationIds) {
+          const { data, error } = await supabase
+            .schema(appSchema)
+            .from('osc')
+            .select('id_osc, nombre_organizacion')
+            .eq('id_osc', candidateId)
+            .maybeSingle();
+
+          if (error) {
+            throw error;
+          }
+
+          if (data) {
+            resolvedOrganizationId = String(data.id_osc ?? candidateId);
+            resolvedOrganizationName = data.nombre_organizacion?.trim() || resolvedOrganizationName;
+            break;
+          }
+        }
+
+        localStorage.setItem('appleseed_auth', 'true');
+        localStorage.setItem('user_type', 'organization');
+        localStorage.setItem('organization_id', resolvedOrganizationId);
+        localStorage.setItem('organization_name', resolvedOrganizationName);
+
+        if (isMounted) {
+          setOrganizationName(resolvedOrganizationName);
+        }
+      } catch {
+        clearLocalSession();
+        if (isMounted) {
+          navigate('/login');
+        }
+      }
+    };
+
+    void validateOrganizationSession();
+
+    if (!isSupabaseConfigured) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const supabase = getSupabaseClient();
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) {
+        return;
+      }
+
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        clearLocalSession();
+        navigate('/login');
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [appSchema, navigate]);
+
+  const handleLogout = async () => {
+    if (isSupabaseConfigured) {
+      try {
+        await getSupabaseClient().auth.signOut();
+      } catch {}
+    }
+
+    clearLocalSession();
     navigate('/login');
   };
 
@@ -77,13 +185,16 @@ export function OrganizationLayout() {
               </div>
             </div>
 
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-xl border border-transparent hover:border-gray-200 transition"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Cerrar Sesión</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <OrganizationNotificationPanel />
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-xl border border-transparent hover:border-gray-200 transition"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Cerrar Sesión</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>

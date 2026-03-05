@@ -13,15 +13,85 @@ export function Layout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const clearLocalSession = () => {
+    localStorage.removeItem('appleseed_auth');
+    localStorage.removeItem('user_type');
+    localStorage.removeItem('organization_id');
+    localStorage.removeItem('organization_name');
+  };
+
   useEffect(() => {
-    const auth = localStorage.getItem('appleseed_auth');
-    const userType = localStorage.getItem('user_type');
-    
-    if (!auth) {
-      navigate('/login');
-    } else if (userType === 'organization') {
-      navigate('/organization');
+    let isMounted = true;
+
+    const validateSession = async () => {
+      const userType = localStorage.getItem('user_type');
+
+      if (!isSupabaseConfigured) {
+        const auth = localStorage.getItem('appleseed_auth');
+        if (!auth) {
+          navigate('/login');
+          return;
+        }
+
+        if (userType === 'organization') {
+          navigate('/organization');
+        }
+
+        return;
+      }
+
+      try {
+        const supabase = getSupabaseClient();
+        const [{ data: sessionData, error: sessionError }, { data: userData, error: userError }] = await Promise.all([
+          supabase.auth.getSession(),
+          supabase.auth.getUser(),
+        ]);
+
+        const hasActiveSession = Boolean(userData.user ?? sessionData.session?.user);
+
+        if (sessionError || userError || !hasActiveSession) {
+          clearLocalSession();
+          if (isMounted) {
+            navigate('/login');
+          }
+          return;
+        }
+
+        if (userType === 'organization') {
+          navigate('/organization');
+        }
+      } catch {
+        clearLocalSession();
+        if (isMounted) {
+          navigate('/login');
+        }
+      }
+    };
+
+    void validateSession();
+
+    if (!isSupabaseConfigured) {
+      return () => {
+        isMounted = false;
+      };
     }
+
+    const supabase = getSupabaseClient();
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) {
+        return;
+      }
+
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        clearLocalSession();
+        navigate('/login');
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      authListener.subscription.unsubscribe();
+    };
   }, [navigate]);
 
   const handleLogout = async () => {
@@ -29,10 +99,7 @@ export function Layout() {
       await getSupabaseClient().auth.signOut();
     }
 
-    localStorage.removeItem('appleseed_auth');
-    localStorage.removeItem('user_type');
-    localStorage.removeItem('organization_id');
-    localStorage.removeItem('organization_name');
+    clearLocalSession();
     navigate('/login');
   };
 
