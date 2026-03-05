@@ -1,6 +1,6 @@
 "use client"
-import { useState, useEffect } from 'react';
-import { Bell, AlertTriangle, Info, CheckCircle, Calendar, User } from 'lucide-react';
+import { useState } from 'react';
+import { Bell, AlertTriangle, Info, CheckCircle, Calendar, User, X } from 'lucide-react';
 import { useAnnouncement } from '../hooks/useAnnouncement';
 import { AnnouncementModel } from '@/lib/models/announcement.model';
 
@@ -30,7 +30,7 @@ export function Announcements() {
     author: a.remitente,
     priority: a.urgencia as 'baja' | 'media' | 'alta',
     category: a.categoria as 'donacion' | 'alerta' | 'urgente' | 'general' | 'documento',
-    read: a.estado === "leido",
+    read: a.estado === 'leido',
   }));
 
   const filteredAnnouncements = mapped.filter((a) => {
@@ -41,8 +41,6 @@ export function Announcements() {
 
   const handleSelect = async (announcement: Announcement) => {
     setSelectedAnnouncement(announcement);
-
-    // If unread, mark as read
     if (!announcement.read) {
       const model = fetchedAnnouncements.find((a) => a.id_aviso === announcement.id);
       if (model) {
@@ -53,22 +51,20 @@ export function Announcements() {
 
   const getPriorityIcon = (priority: string) => {
     switch (priority) {
-      case 'alta': return <AlertTriangle className="w-5 h-5 text-red-600" />;
+      case 'alta':  return <AlertTriangle className="w-5 h-5 text-red-600" />;
       case 'media': return <Info className="w-5 h-5 text-orange-600" />;
-      default: return <CheckCircle className="w-5 h-5 text-blue-600" />;
+      default:      return <CheckCircle className="w-5 h-5 text-blue-600" />;
     }
   };
 
   const getPriorityBadge = (priority: string) => {
     const styles: Record<string, string> = {
-      alta: 'bg-red-100 text-red-700',
+      alta:  'bg-red-100 text-red-700',
       media: 'bg-orange-100 text-orange-700',
-      baja: 'bg-blue-100 text-blue-700',
+      baja:  'bg-blue-100 text-blue-700',
     };
     const labels: Record<string, string> = {
-      alta: 'Urgente',
-      media: 'Importante',
-      baja: 'Informativo',
+      alta: 'Urgente', media: 'Importante', baja: 'Informativo',
     };
     return (
       <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${styles[priority] ?? styles.baja}`}>
@@ -78,7 +74,7 @@ export function Announcements() {
   };
 
   if (loading) return <div className="text-center py-8">Cargando avisos...</div>;
-  if (error) return <div className="text-center py-8 text-red-500">{error}</div>;
+  if (error)   return <div className="text-center py-8 text-red-500">{error}</div>;
 
   return (
     <div className="space-y-6">
@@ -110,40 +106,52 @@ export function Announcements() {
         </div>
       </div>
 
-      {/* List + Detail */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1 space-y-4">
-          {filteredAnnouncements.map((a) => (
-            <div key={a.id} onClick={() => handleSelect(a)}
-              className={`bg-white rounded-xl shadow-sm border-2 p-4 cursor-pointer transition ${
-                selectedAnnouncement?.id === a.id ? 'border-emerald-600'
-                : a.read ? 'border-gray-200 hover:border-gray-300'
-                : 'border-emerald-200 hover:border-emerald-300 bg-emerald-50'
-              }`}>
-              <div className="flex items-start gap-3 mb-3">
-                {getPriorityIcon(a.priority)}
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">{a.title}</h3>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <Calendar className="w-3 h-3" />
-                    {new Date(a.date).toLocaleDateString('es-MX')}
-                  </div>
-                </div>
-                {!a.read && <div className="w-2 h-2 bg-emerald-600 rounded-full flex-shrink-0 mt-2" />}
-              </div>
-              <div className="flex items-center gap-2">
-                {getPriorityBadge(a.priority)}
-                <span className="text-xs text-gray-600">{a.category}</span>
-              </div>
+      {/* List + Detail — both same height, both scroll independently */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+
+        {/* ── List ── */}
+        <div className="lg:col-span-1 overflow-y-auto max-h-[calc(100vh-280px)] pr-1 space-y-4">
+          {filteredAnnouncements.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-10 text-center">
+              <Bell className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+              <h3 className="text-base font-semibold text-gray-900 mb-1">No hay avisos</h3>
+              <p className="text-sm text-gray-500">No se encontraron avisos con los filtros seleccionados</p>
             </div>
-          ))}
+          ) : (
+            filteredAnnouncements.map((a) => (
+              <div key={a.id} onClick={() => handleSelect(a)}
+                className={`bg-white rounded-xl shadow-sm border-2 p-4 cursor-pointer transition ${
+                  selectedAnnouncement?.id === a.id ? 'border-emerald-600'
+                  : a.read ? 'border-gray-200 hover:border-gray-300'
+                  : 'border-emerald-200 hover:border-emerald-300 bg-emerald-50'
+                }`}>
+                <div className="flex items-start gap-3 mb-3">
+                  {getPriorityIcon(a.priority)}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">{a.title}</h3>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <Calendar className="w-3 h-3" />
+                      {new Date(a.date).toLocaleDateString('es-MX')}
+                    </div>
+                  </div>
+                  {!a.read && <div className="w-2 h-2 bg-emerald-600 rounded-full flex-shrink-0 mt-2" />}
+                </div>
+                <div className="flex items-center gap-2">
+                  {getPriorityBadge(a.priority)}
+                  <span className="text-xs text-gray-600">{a.category}</span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
-        <div className="lg:col-span-2">
+        {/* ── Detail ── */}
+        <div className="lg:col-span-2 overflow-y-auto max-h-[calc(100vh-280px)]">
           {selectedAnnouncement ? (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
-              <div className="mb-6">
-                <div className="flex items-start gap-3 mb-4">
+              {/* Close button */}
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex items-start gap-3 flex-1">
                   {getPriorityIcon(selectedAnnouncement.priority)}
                   <div className="flex-1">
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">{selectedAnnouncement.title}</h2>
@@ -153,6 +161,12 @@ export function Announcements() {
                     </div>
                   </div>
                 </div>
+                <button
+                  onClick={() => setSelectedAnnouncement(null)}
+                  className="ml-4 w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition flex-shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
               <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
@@ -191,14 +205,6 @@ export function Announcements() {
           )}
         </div>
       </div>
-
-      {filteredAnnouncements.length === 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <Bell className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay avisos</h3>
-          <p className="text-gray-600">No se encontraron avisos con los filtros seleccionados</p>
-        </div>
-      )}
     </div>
   );
 }
