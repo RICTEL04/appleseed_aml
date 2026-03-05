@@ -24,6 +24,13 @@ interface OrganizationModalProps {
   onClose: () => void;
 }
 
+const normalizeRiskLevel = (riskValue: string): 'Bajo' | 'Medio' | 'Alto' => {
+  const normalized = riskValue.trim().toLowerCase();
+  if (normalized === 'alto') return 'Alto';
+  if (normalized === 'medio') return 'Medio';
+  return 'Bajo';
+};
+
 export function OrganizationModal({ organization, worker, onClose }: OrganizationModalProps) {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -49,7 +56,8 @@ export function OrganizationModal({ organization, worker, onClose }: Organizatio
   };
 
   const status = statusConfig[organization.status] ?? statusConfig['Pendiente'];
-  const risk   = riskConfig[organization.risk]     ?? riskConfig['Bajo'];
+  const normalizedRisk = normalizeRiskLevel(organization.risk);
+  const risk   = riskConfig[normalizedRisk] ?? riskConfig['Bajo'];
 
   return (
     <div
@@ -101,7 +109,7 @@ export function OrganizationModal({ organization, worker, onClose }: Organizatio
               <div>
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Nivel de Riesgo</h3>
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${risk.classes}`}>
-                  <Shield className="w-3.5 h-3.5" />{organization.risk}
+                  <Shield className="w-3.5 h-3.5" />{normalizedRisk}
                 </span>
                 <div className="mt-2 h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
                   <div className={`h-full rounded-full ${risk.bar}`} />

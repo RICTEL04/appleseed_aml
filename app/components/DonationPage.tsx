@@ -64,6 +64,7 @@ interface RFCValidationResponse {
 }
 
 type DonorAuthMode = 'register' | 'login';
+type DonorPersonType = 'fisica' | 'moral';
 type PaymentMethod = 'online' | 'transfer' | 'bankSlip';
 type RegisterFieldKey = keyof DonorData | 'donorPassword' | 'donorPasswordConfirm';
 type RegisterFieldErrors = Partial<Record<RegisterFieldKey, string>>;
@@ -72,6 +73,7 @@ export function DonationPage() {
   const { id_organizacion, organizationId } = useParams<{ id_organizacion?: string; organizationId?: string }>();
   const organizationParam = id_organizacion ?? organizationId;
   const [authMode, setAuthMode] = useState<DonorAuthMode>('register');
+  const [donorPersonType, setDonorPersonType] = useState<DonorPersonType>('fisica');
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [organizationLookupLoading, setOrganizationLookupLoading] = useState(true);
@@ -248,6 +250,7 @@ export function DonationPage() {
 
   const getRegisterFieldErrors = (): RegisterFieldErrors => {
     const errors: RegisterFieldErrors = {};
+    const isMoralPerson = donorPersonType === 'moral';
 
     const firstName = donorData.firstName.trim();
     const lastName = donorData.lastName.trim();
@@ -265,12 +268,12 @@ export function DonationPage() {
     if (!email) errors.email = 'Ingresa correo electrónico.';
     if (!donorPassword.trim()) errors.donorPassword = 'Ingresa contraseña.';
     if (!donorPasswordConfirm.trim()) errors.donorPasswordConfirm = 'Confirma la contraseña.';
-    if (!firstName) errors.firstName = 'Ingresa nombre(s).';
-    if (!lastName) errors.lastName = 'Ingresa apellido paterno.';
-    if (!secondLastName) errors.secondLastName = 'Ingresa apellido materno.';
+    if (!firstName) errors.firstName = isMoralPerson ? 'Ingresa nombre de la organización.' : 'Ingresa nombre(s).';
+    if (!isMoralPerson && !lastName) errors.lastName = 'Ingresa apellido paterno.';
+    if (!isMoralPerson && !secondLastName) errors.secondLastName = 'Ingresa apellido materno.';
     if (!birthDate) errors.fecha_nacimiento = 'Ingresa fecha de nacimiento.';
     if (!rfc) errors.rfc = 'Ingresa RFC.';
-    if (!phone) errors.phone = 'Ingresa teléfono.';
+    if (!isMoralPerson && !phone) errors.phone = 'Ingresa teléfono.';
     if (!street) errors.calle = 'Ingresa calle.';
     if (!exteriorNumber) errors.num_exterior = 'Ingresa número exterior.';
     if (!postalCode) errors.cp = 'Ingresa código postal.';
@@ -298,7 +301,7 @@ export function DonationPage() {
       errors.cp = 'El código postal debe tener exactamente 5 dígitos.';
     }
 
-    if (lastName && lastName.length < 2) {
+    if (!isMoralPerson && lastName && lastName.length < 2) {
       errors.lastName = 'El apellido paterno debe tener al menos 2 caracteres para validar el RFC.';
     }
 
@@ -319,44 +322,63 @@ export function DonationPage() {
     const normalizedLastName = normalizeLetters(lastName);
     const normalizedSecondLastName = normalizeLetters(secondLastName);
     const normalizedFirstName = normalizeLetters(firstName);
-    const normalizedRFC = normalizeLetters(rfc) + rfc.replace(/[^0-9]/g, '');
+    const expectedRfcLength = isMoralPerson ? 12 : 13;
 
     if (rfc.length > 13) {
       errors.rfc = 'El RFC no puede tener más de 13 caracteres.';
     }
 
-    if (rfc.length !== 13) {
+    if (rfc.length !== expectedRfcLength) {
       if (rfc.length > 0) {
-        errors.rfc = 'El RFC debe tener exactamente 13 caracteres.';
+        errors.rfc = `El RFC debe tener exactamente ${expectedRfcLength} caracteres.`;
       }
     }
 
-    if (rfc.length === 13 && !/^[A-ZÑ&]{4}\d{6}[A-Z0-9]{3}$/.test(rfc)) {
+    if (!isMoralPerson && rfc.length === 13 && !/^[A-ZÑ&]{4}\d{6}[A-Z0-9]{3}$/.test(rfc)) {
       errors.rfc = 'El RFC debe tener formato válido de persona física (4 letras, 6 dígitos de fecha y 3 de homoclave).';
     }
 
-    if (rfc.length === 13 && (normalizedLastName.length < 2 || normalizedSecondLastName.length < 1 || normalizedFirstName.length < 1)) {
+    if (isMoralPerson && rfc.length === 12 && !/^[A-ZÑ&]{3}\d{6}[A-Z0-9]{3}$/.test(rfc)) {
+      errors.rfc = 'El RFC debe tener formato válido de persona moral (3 letras, 6 dígitos de fecha y 3 de homoclave).';
+    }
+
+    if (!isMoralPerson && rfc.length === 13 && (normalizedLastName.length < 2 || normalizedSecondLastName.length < 1 || normalizedFirstName.length < 1)) {
       errors.rfc = 'Nombre y apellidos deben contener letras válidas para verificar el RFC.';
     }
 
-    const firstInternalVowel = findFirstInternalVowel(normalizedLastName);
+    const firstInternalVowel = !isMoralPerson ? findFirstInternalVowel(normalizedLastName) : undefined;
 
-    if (!firstInternalVowel) {
+    if (!isMoralPerson && rfc.length === 13 && normalizedLastName.length >= 2 && !firstInternalVowel) {
       errors.rfc = 'El apellido paterno debe incluir al menos una vocal después de la primera letra para validar el RFC.';
     }
 
-    const expectedPrefix = `${normalizedLastName.slice(0, 1)}${firstInternalVowel ?? ''}${normalizedSecondLastName.slice(0, 1)}${normalizedFirstName.slice(0, 1)}`;
-    const rfcPrefix = rfc.slice(0, 4);
+    if (isMoralPerson) {
+      if (normalizedFirstName.length < 3) {
+        errors.rfc = 'El nombre de la organización debe contener al menos 3 letras para validar el RFC.';
+      }
 
-    if (rfc.length === 13 && normalizedLastName.length >= 2 && normalizedSecondLastName.length >= 1 && normalizedFirstName.length >= 1 && firstInternalVowel && rfcPrefix !== expectedPrefix) {
-      errors.rfc = 'Los primeros 4 caracteres del RFC no coinciden con: inicial + vocal interna del apellido paterno, inicial del apellido materno e inicial del nombre.';
+      const expectedPrefix = normalizedFirstName.slice(0, 3);
+      const rfcPrefix = rfc.slice(0, 3);
+
+      if (rfc.length === 12 && normalizedFirstName.length >= 3 && rfcPrefix !== expectedPrefix) {
+        errors.rfc = 'Los primeros 3 caracteres del RFC no coinciden con las primeras 3 letras del nombre de la organización.';
+      }
+    } else {
+      const expectedPrefix = `${normalizedLastName.slice(0, 1)}${firstInternalVowel ?? ''}${normalizedSecondLastName.slice(0, 1)}${normalizedFirstName.slice(0, 1)}`;
+      const rfcPrefix = rfc.slice(0, 4);
+
+      if (rfc.length === 13 && normalizedLastName.length >= 2 && normalizedSecondLastName.length >= 1 && normalizedFirstName.length >= 1 && firstInternalVowel && rfcPrefix !== expectedPrefix) {
+        errors.rfc = 'Los primeros 4 caracteres del RFC no coinciden con: inicial + vocal interna del apellido paterno, inicial del apellido materno e inicial del nombre.';
+      }
     }
 
     const expectedDatePart = birthDate.slice(2, 4) + birthDate.slice(5, 7) + birthDate.slice(8, 10);
-    const rfcDatePart = rfc.slice(4, 10);
+    const rfcDatePart = isMoralPerson ? rfc.slice(3, 9) : rfc.slice(4, 10);
 
-    if (rfc.length === 13 && birthDate && /^\d{4}-\d{2}-\d{2}$/.test(birthDate) && rfcDatePart !== expectedDatePart) {
-      errors.rfc = 'Los dígitos 5 al 10 del RFC no coinciden con la fecha de nacimiento (AAMMDD).';
+    if (rfc.length === expectedRfcLength && birthDate && /^\d{4}-\d{2}-\d{2}$/.test(birthDate) && rfcDatePart !== expectedDatePart) {
+      errors.rfc = isMoralPerson
+        ? 'Los dígitos 4 al 9 del RFC no coinciden con la fecha de creación (AAMMDD).'
+        : 'Los dígitos 5 al 10 del RFC no coinciden con la fecha de nacimiento (AAMMDD).';
     }
 
     return errors;
@@ -377,6 +399,7 @@ export function DonationPage() {
     setRegisterFieldErrors(getRegisterFieldErrors());
   }, [
     authMode,
+    donorPersonType,
     donorData,
     donorPassword,
     donorPasswordConfirm,
@@ -559,7 +582,7 @@ export function DonationPage() {
     let value = e.target.value;
 
     if (e.target.name === 'rfc') {
-      value = value.toUpperCase().replace(/\s/g, '').slice(0, 13);
+      value = value.toUpperCase().replace(/\s/g, '').slice(0, donorPersonType === 'moral' ? 12 : 13);
     }
 
     if (e.target.name === 'cp') {
@@ -879,7 +902,7 @@ export function DonationPage() {
 
   const sendDonationConfirmationEmail = async (generatedTransactionId: string) => {
     const amountValue = Number.parseFloat(String(selectedAmount).replace(',', '.'));
-    const donorName = `${donorData.firstName} ${donorData.lastName}`.trim() || 'Donador';
+    const donorName = donorDisplayName || 'Donador';
 
     const response = await fetch('/api/send-donation-confirmation', {
       method: 'POST',
@@ -912,7 +935,7 @@ export function DonationPage() {
       throw new Error('Monto inválido para registrar aviso de donación.');
     }
 
-    const donorName = `${donorData.firstName} ${donorData.lastName} ${donorData.secondLastName}`.trim() || 'Donante';
+    const donorName = donorDisplayName || 'Donante';
     const amountFormatted = amountValue.toLocaleString('es-MX', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -962,11 +985,12 @@ export function DonationPage() {
     const donorPayload = {
       nombre: donorData.firstName.trim(),
       rfc: normalizedRFC,
-      apellido_paterno: donorData.lastName.trim(),
-      apellido_materno: donorData.secondLastName.trim(),
+      apellido_paterno: donorPersonType === 'moral' ? '' : donorData.lastName.trim(),
+      apellido_materno: donorPersonType === 'moral' ? '' : donorData.secondLastName.trim(),
       fecha_nacimiento: donorData.fecha_nacimiento,
       email: normalizedEmail,
-      telefono: donorData.phone.trim(),
+      telefono: donorPersonType === 'moral' ? '' : donorData.phone.trim(),
+      person_type: donorPersonType,
     };
 
     const addressPayload = {
@@ -1095,14 +1119,17 @@ export function DonationPage() {
     setDonorData((current) => ({
       ...current,
       firstName: donorRecord.nombre,
-      lastName: donorRecord.apellido_paterno,
-      secondLastName: donorRecord.apellido_materno,
+      lastName: donorRecord.apellido_paterno ?? '',
+      secondLastName: donorRecord.apellido_materno ?? '',
       fecha_nacimiento: donorRecord.fecha_nacimiento,
       rfc: donorRecord.rfc,
       email: donorRecord.email ?? normalizedEmail,
-      phone: donorRecord.telefono,
+      phone: donorRecord.telefono ?? '',
       validated: true,
     }));
+
+    const inferredPersonType: DonorPersonType = donorRecord.rfc?.trim().length === 12 ? 'moral' : 'fisica';
+    setDonorPersonType(inferredPersonType);
 
     setValidationMessage('Inicio de sesión correcto. Puedes continuar con tu donación.');
     setHomeView('options');
@@ -1281,7 +1308,7 @@ export function DonationPage() {
       maximumFractionDigits: 2,
     });
 
-    const donorFullName = `${donorData.firstName} ${donorData.lastName} ${donorData.secondLastName}`.trim();
+    const donorFullName = donorDisplayName.trim();
     const issueDateText = emissionDate.toLocaleString('es-MX');
     const expiryDateText = expiryDate.toLocaleDateString('es-MX');
 
@@ -1481,12 +1508,16 @@ export function DonationPage() {
       setDonationHistory([]);
       setSatValidationStatus('idle');
       setAuthMode('register');
+      setDonorPersonType('fisica');
       setStep(1);
       setLoading(false);
     }
   };
 
   const selectedAmount = customAmount || donationAmount;
+  const donorDisplayName = donorPersonType === 'moral'
+    ? donorData.firstName.trim()
+    : `${donorData.firstName} ${donorData.lastName} ${donorData.secondLastName}`.trim();
   const organizationDisplayName = organizationNameFromOsc || organizationData?.legalName || 'Organización';
   const captureSeed = `${organizationParam ?? 'ORG'}-${selectedAmount}`;
   const captureChecksum = captureSeed
@@ -1567,7 +1598,7 @@ export function DonationPage() {
               <strong>Beneficiario:</strong> {organizationDisplayName}
             </p>
             <p className="text-sm text-gray-700 mb-2">
-              <strong>Donante:</strong> {donorData.firstName} {donorData.lastName}
+              <strong>Donante:</strong> {donorDisplayName}
             </p>
             <p className="text-sm text-gray-700">
               <strong>ID de transacción:</strong> {transactionId}
@@ -1705,6 +1736,26 @@ export function DonationPage() {
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
                   <p className="text-sm font-medium text-emerald-800">Registro guiado</p>
                   <p className="text-xs text-emerald-700 mt-1">Primero crea tu cuenta y luego completa tus datos personales y dirección.</p>
+                  <div className="grid grid-cols-2 gap-2 bg-white rounded-xl p-1 mt-4 border border-emerald-200">
+                    <button
+                      type="button"
+                      onClick={() => setDonorPersonType('fisica')}
+                      className={`rounded-lg py-2.5 text-sm font-medium transition ${
+                        donorPersonType === 'fisica' ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'
+                      }`}
+                    >
+                      Persona física
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDonorPersonType('moral')}
+                      className={`rounded-lg py-2.5 text-sm font-medium transition ${
+                        donorPersonType === 'moral' ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'
+                      }`}
+                    >
+                      Persona moral
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1742,19 +1793,25 @@ export function DonationPage() {
                   <>
                     <div className="sm:col-span-2 rounded-2xl border border-gray-200 bg-gray-50/80 p-4 sm:p-5">
                       <div className="flex items-center justify-between mb-4 gap-3">
-                        <p className="text-sm font-semibold text-gray-800">Datos personales</p>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {donorPersonType === 'moral' ? 'Datos de la organización' : 'Datos personales'}
+                        </p>
                         <span className={`text-xs rounded-lg px-2 py-1 border whitespace-nowrap ${
-                          !registerFieldErrors.firstName && !registerFieldErrors.lastName && !registerFieldErrors.secondLastName && !registerFieldErrors.fecha_nacimiento && !registerFieldErrors.phone
+                          donorPersonType === 'moral'
+                            ? !registerFieldErrors.firstName && !registerFieldErrors.fecha_nacimiento && !registerFieldErrors.rfc
+                            : !registerFieldErrors.firstName && !registerFieldErrors.lastName && !registerFieldErrors.secondLastName && !registerFieldErrors.fecha_nacimiento && !registerFieldErrors.phone
                             ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
                             : 'border-amber-300 bg-amber-100 text-amber-800'
                         }`}>
-                          {!registerFieldErrors.firstName && !registerFieldErrors.lastName && !registerFieldErrors.secondLastName && !registerFieldErrors.fecha_nacimiento && !registerFieldErrors.phone ? 'Completo' : 'Pendiente'}
+                          {donorPersonType === 'moral'
+                            ? (!registerFieldErrors.firstName && !registerFieldErrors.fecha_nacimiento && !registerFieldErrors.rfc ? 'Completo' : 'Pendiente')
+                            : (!registerFieldErrors.firstName && !registerFieldErrors.lastName && !registerFieldErrors.secondLastName && !registerFieldErrors.fecha_nacimiento && !registerFieldErrors.phone ? 'Completo' : 'Pendiente')}
                         </span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Nombre(s) *
+                            {donorPersonType === 'moral' ? 'Nombre de la organización *' : 'Nombre(s) *'}
                           </label>
                           <input
                             type="text"
@@ -1763,43 +1820,47 @@ export function DonationPage() {
                             value={donorData.firstName}
                             onChange={handleDonorChange}
                             className={inputClass}
-                            placeholder="Juan"
+                            placeholder={donorPersonType === 'moral' ? 'Fundación Ejemplo A.C.' : 'Juan'}
                           />
                         </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Apellido Paterno *
-                          </label>
-                          <input
-                            type="text"
-                            name="lastName"
-                            required
-                            value={donorData.lastName}
-                            onChange={handleDonorChange}
-                            className={inputClass}
-                            placeholder="Pérez"
-                          />
-                        </div>
+                        {donorPersonType === 'fisica' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Apellido Paterno *
+                            </label>
+                            <input
+                              type="text"
+                              name="lastName"
+                              required
+                              value={donorData.lastName}
+                              onChange={handleDonorChange}
+                              className={inputClass}
+                              placeholder="Pérez"
+                            />
+                          </div>
+                        )}
+
+                        {donorPersonType === 'fisica' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Apellido Materno *
+                            </label>
+                            <input
+                              type="text"
+                              name="secondLastName"
+                              required
+                              value={donorData.secondLastName}
+                              onChange={handleDonorChange}
+                              className={inputClass}
+                              placeholder="García"
+                            />
+                          </div>
+                        )}
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Apellido Materno *
-                          </label>
-                          <input
-                            type="text"
-                            name="secondLastName"
-                            required
-                            value={donorData.secondLastName}
-                            onChange={handleDonorChange}
-                            className={inputClass}
-                            placeholder="García"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Fecha de Nacimiento *
+                            {donorPersonType === 'moral' ? 'Fecha de creación *' : 'Fecha de Nacimiento *'}
                           </label>
                           <input
                             type="date"
@@ -1819,10 +1880,11 @@ export function DonationPage() {
                             type="text"
                             name="rfc"
                             required
+                            maxLength={donorPersonType === 'moral' ? 12 : 13}
                             value={donorData.rfc}
                             onChange={handleDonorChange}
                             className={inputClass}
-                            placeholder="PEGJ850101XXX"
+                            placeholder={donorPersonType === 'moral' ? 'ABC850101XXX' : 'PEGJ850101XXX'}
                           />
                           {donorData.rfc.length > 0 && (
                             <p className={`text-xs mt-1 ${registerFieldErrors.rfc ? 'text-red-600' : 'text-emerald-700'}`}>
@@ -1831,20 +1893,22 @@ export function DonationPage() {
                           )}
                         </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Teléfono *
-                          </label>
-                          <input
-                            type="tel"
-                            name="phone"
-                            required
-                            value={donorData.phone}
-                            onChange={handleDonorChange}
-                            className={inputClass}
-                            placeholder="+52 55 1234 5678"
-                          />
-                        </div>
+                        {donorPersonType === 'fisica' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Teléfono *
+                            </label>
+                            <input
+                              type="tel"
+                              name="phone"
+                              required
+                              value={donorData.phone}
+                              onChange={handleDonorChange}
+                              className={inputClass}
+                              placeholder="+52 55 1234 5678"
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
 

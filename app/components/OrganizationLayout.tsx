@@ -23,20 +23,29 @@ export function OrganizationLayout() {
 
   useEffect(() => {
     let isMounted = true;
+    let isValidating = false;
+    let lastValidationAt = 0;
 
     const validateOrganizationSession = async () => {
+      if (isValidating) {
+        return;
+      }
+
+      isValidating = true;
+
       const storedAuth = localStorage.getItem('appleseed_auth');
       const storedUserType = localStorage.getItem('user_type');
-      const storedOrganizationId = localStorage.getItem('organization_id') || '';
       const storedOrganizationName = localStorage.getItem('organization_name') || 'Organización';
 
       if (!isSupabaseConfigured) {
         if (!storedAuth || storedUserType !== 'organization') {
           navigate('/login');
+          isValidating = false;
           return;
         }
 
         setOrganizationName(storedOrganizationName);
+        isValidating = false;
         return;
       }
 
@@ -65,31 +74,23 @@ export function OrganizationLayout() {
           return;
         }
 
-        const candidateOrganizationIds = [storedOrganizationId, activeUser.id].filter(
-          (value, index, values) => Boolean(value) && values.indexOf(value) === index,
-        ) as string[];
+        const { data: organizationRow, error: organizationError } = await supabase
+          .schema(appSchema)
+          .from('osc')
+          .select('id_osc, nombre_organizacion')
+          .eq('id_osc', activeUser.id)
+          .maybeSingle();
 
-        let resolvedOrganizationId = storedOrganizationId || activeUser.id;
-        let resolvedOrganizationName = storedOrganizationName;
-
-        for (const candidateId of candidateOrganizationIds) {
-          const { data, error } = await supabase
-            .schema(appSchema)
-            .from('osc')
-            .select('id_osc, nombre_organizacion')
-            .eq('id_osc', candidateId)
-            .maybeSingle();
-
-          if (error) {
-            throw error;
+        if (organizationError || !organizationRow) {
+          clearLocalSession();
+          if (isMounted) {
+            navigate('/login');
           }
-
-          if (data) {
-            resolvedOrganizationId = String(data.id_osc ?? candidateId);
-            resolvedOrganizationName = data.nombre_organizacion?.trim() || resolvedOrganizationName;
-            break;
-          }
+          return;
         }
+
+        const resolvedOrganizationId = String(organizationRow.id_osc ?? activeUser.id);
+        const resolvedOrganizationName = organizationRow.nombre_organizacion?.trim() || storedOrganizationName;
 
         localStorage.setItem('appleseed_auth', 'true');
         localStorage.setItem('user_type', 'organization');
@@ -104,7 +105,20 @@ export function OrganizationLayout() {
         if (isMounted) {
           navigate('/login');
         }
+      } finally {
+        isValidating = false;
       }
+    };
+
+    const triggerValidation = () => {
+      const now = Date.now();
+
+      if (now - lastValidationAt < 5000) {
+        return;
+      }
+
+      lastValidationAt = now;
+      void validateOrganizationSession();
     };
 
     void validateOrganizationSession();
@@ -127,8 +141,25 @@ export function OrganizationLayout() {
       }
     });
 
+    const interactionEvents: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'focus'];
+    interactionEvents.forEach((eventName) => {
+      window.addEventListener(eventName, triggerValidation, { passive: true });
+    });
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        triggerValidation();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       isMounted = false;
+      interactionEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, triggerValidation);
+      });
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       authListener.subscription.unsubscribe();
     };
   }, [appSchema, navigate]);
