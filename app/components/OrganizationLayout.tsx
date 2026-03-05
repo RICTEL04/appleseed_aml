@@ -148,18 +148,6 @@ export function OrganizationLayout() {
             </Link>
 
             <Link
-              to="/organization/messages"
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${
-                isActive('/organization/messages')
-                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'
-                  : 'text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <MessageSquare className="w-5 h-5" />
-              <span>Mensajes</span>
-            </Link>
-
-            <Link
               to="/organization/profile"
               className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${
                 isActive('/organization/profile')

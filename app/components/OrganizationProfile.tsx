@@ -180,70 +180,82 @@ export function OrganizationProfile() {
   const stillLoading = orgLoading || bankLoading;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Perfil de Organización</h1>
-        <p className="text-gray-600">Configure su información bancaria para recibir donaciones</p>
-      </div>
-
-      {formData.isComplete && (
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl shadow-lg p-6 text-white">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Share2 className="w-6 h-6" />
+    <div className="space-y-6 pb-2">
+      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500" />
+        <div className="px-5 py-4 sm:px-6 sm:py-5">
+          <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+            <div className="xl:pr-4">
+              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-100 mb-2">
+                Perfil de organización
+              </span>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">Perfil de Organización</h1>
+              <p className="text-sm sm:text-base text-gray-600">Configure su información bancaria para recibir donaciones</p>
             </div>
-            <div className="flex-1">
-              <h2 className="text-xl font-bold mb-2">¡Tu Link de Donación está Listo!</h2>
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 mb-3">
-                <div className="flex items-center gap-3">
-                  <code className="flex-1 text-sm break-all">{donationLink}</code>
-                  <button onClick={() => { navigator.clipboard.writeText(donationLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-                    className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition flex items-center gap-2 flex-shrink-0">
-                    {copied ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    {copied ? 'Copiado' : 'Copiar'}
-                  </button>
+
+            {formData.isComplete && (
+              <div className="w-full xl:w-auto xl:min-w-[420px] xl:max-w-[520px] bg-emerald-50 rounded-xl p-3.5 sm:p-4 border border-emerald-200">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 bg-emerald-600 rounded-lg flex items-center justify-center flex-shrink-0 text-white">
+                    <Share2 className="w-4.5 h-4.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-sm sm:text-base font-semibold text-emerald-900 mb-1">Link de donación listo para compartir</h2>
+                    <div className="bg-white rounded-lg p-2 border border-emerald-100">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <code className="flex-1 text-[11px] sm:text-xs break-all leading-relaxed text-emerald-900">{donationLink}</code>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(donationLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-md transition-colors flex items-center justify-center gap-1.5 flex-shrink-0 text-xs font-semibold text-white"
+                        >
+                          {copied ? <CheckCircle className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          {copied ? 'Copiado' : 'Copiar'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* General Info */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 sm:p-7">
           <div className="flex items-center gap-2 mb-6">
             <Building2 className="w-5 h-5 text-emerald-600" />
             <h2 className="text-xl font-semibold text-gray-900">Información General</h2>
             {orgLoading && <span className="ml-auto flex items-center gap-1 text-xs text-gray-400"><Spinner /> Cargando...</span>}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Nombre Legal</label>
               {orgLoading ? <FieldSkeleton wide /> : (
                 <textarea readOnly value={organization?.nombre_organizacion ?? ''}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50" />
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50 text-gray-700" />
               )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">RFC</label>
               {orgLoading ? <FieldSkeleton /> : (
                 <textarea readOnly value={organization?.rfc ?? ''}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50" />
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50 text-gray-700" />
               )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Teléfono</label>
               {orgLoading ? <FieldSkeleton /> : (
                 <textarea readOnly value={organization?.telefono ?? ''}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50" />
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50 text-gray-700" />
               )}
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Correo Electrónico</label>
               {orgLoading ? <FieldSkeleton wide /> : (
                 <textarea readOnly value={organization?.email ?? ''}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50" />
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none bg-gray-50 text-gray-700" />
               )}
             </div>
 
@@ -280,7 +292,7 @@ export function OrganizationProfile() {
 
         {/* Bank Info */}
         {bankLoading ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 sm:p-7">
             <div className="flex items-center gap-2 mb-6">
               <CreditCard className="w-5 h-5 text-emerald-600" />
               <h2 className="text-xl font-semibold text-gray-900">Información Bancaria</h2>
@@ -296,9 +308,9 @@ export function OrganizationProfile() {
             error={bankError} />
         )}
 
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-1">
           <button type="submit" disabled={!isFormComplete || isSaving || stillLoading}
-            className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition shadow-lg shadow-emerald-600/30 flex items-center gap-2">
+            className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl font-medium transition shadow-md shadow-emerald-600/25 flex items-center gap-2">
             {isSaving ? (<><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Guardando...</>) :
               (formData.isComplete ? 'Actualizar Información' : 'Guardar')}
           </button>
