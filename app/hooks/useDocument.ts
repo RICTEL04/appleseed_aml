@@ -61,10 +61,30 @@ export function useDocument(){
         }
     }, []);
 
+    const updateDocument = useCallback(async (document: DocumentModel) => {
+        try {
+            setLoading(true);
+            console.log('[useDocument] updating document =>', document);
+            const updated = await documentRepository.updateDocument(document);
+            setDocuments((prev) =>
+                prev.map((d) => (d.id_documento === updated.id_documento ? updated : d))
+            );
+            return updated;
+        } catch (err) {
+            console.error('[useDocument] update error:', err);
+            setError('Failed to update document');
+            throw err;
+        }
+        finally {
+            setLoading(false);
+        }
+    }, []);
+
     return { documents, loading, error, 
             fetchDocuments, 
             createRegisterDocument,
-            fetchAllDocumentsByOrg};
+            fetchAllDocumentsByOrg,
+            updateDocument};
 
 
 }

@@ -240,6 +240,7 @@ export function Organizations() {
             {selectedOrg && (
                 <OrganizationModal
                     organization={selectedOrg}
+                    worker={worker}
                     onClose={() => setSelectedOrg(null)}
                 />
             )}

@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import { X, Building2, Phone, Mail, MapPin, Shield, Calendar, Tag, AlertTriangle, CheckCircle, Clock, FileText } from 'lucide-react';
 import { DocumentViewer } from './Documentviewer';
+import {WorkerModel} from '@/lib/models/worker.model';
 
 interface OrganizationDetail {
   id: string;
@@ -19,10 +20,11 @@ interface OrganizationDetail {
 
 interface OrganizationModalProps {
   organization: OrganizationDetail | null;
+  worker: WorkerModel | null;
   onClose: () => void;
 }
 
-export function OrganizationModal({ organization, onClose }: OrganizationModalProps) {
+export function OrganizationModal({ organization, worker, onClose }: OrganizationModalProps) {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handleKey);
@@ -135,7 +137,7 @@ export function OrganizationModal({ organization, onClose }: OrganizationModalPr
                 <FileText className="w-3.5 h-3.5" /> Documentos en Revisión
               </h3>
             </div>
-            <DocumentViewer orgId={organization.id} />
+            <DocumentViewer orgId={organization.id} worker={worker} />
           </div>
         </div>
 
