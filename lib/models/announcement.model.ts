@@ -10,8 +10,8 @@ export interface IAnnouncement {
   id_osc: string | null
   estado: string
   fecha: string | null
+  categoria: string
   urgencia: string
-  created_at: string
 }
 
 export class AnnouncementModel implements IAnnouncement {
@@ -22,8 +22,8 @@ export class AnnouncementModel implements IAnnouncement {
   id_osc: string | null
   estado: string
   fecha: string | null
+  categoria: string
   urgencia: string
-  created_at: string
 
   // Optional relation
   organization?: OrganizationModel
@@ -37,7 +37,7 @@ export class AnnouncementModel implements IAnnouncement {
     this.estado = data.estado
     this.fecha = data.fecha
     this.urgencia = data.urgencia
-    this.created_at = data.created_at
+    this.categoria = data.categoria
   }
 
   // Domain methods
@@ -59,16 +59,21 @@ export class AnnouncementModel implements IAnnouncement {
   }
 
   getStatus(): AvisoStatus {
-    const validStatus: AvisoStatus[] = ['enviado', 'recibido', 'leido', 'archivado']
+    const validStatus: AvisoStatus[] = ['leido', 'noleido']
     return validStatus.includes(this.estado as AvisoStatus)
       ? this.estado as AvisoStatus
-      : 'enviado'
+      : 'noleido'
+  }
+
+  getBoolStatus() : boolean{
+    return this.getStatus() === 'leido'
   }
 
   isUrgent(): boolean {
     return this.getUrgencyLevel() === 'urgente'
   }
 
+  /*
   getFormattedDate(): string {
     const date = this.fecha ? new Date(this.fecha) : new Date(this.created_at)
     return date.toLocaleDateString('es-MX', {
@@ -79,7 +84,7 @@ export class AnnouncementModel implements IAnnouncement {
       minute: '2-digit'
     })
   }
-
+  */
   getPreview(length: number = 100): string {
     return this.mensaje.length > length 
       ? `${this.mensaje.substring(0, length)}...` 
@@ -92,10 +97,11 @@ export class AnnouncementModel implements IAnnouncement {
       titulo: this.titulo,
       mensaje: this.mensaje,
       remitente: this.remitente,
-      urgencia: this.getUrgencyLevel(),
-      fecha: this.getFormattedDate(),
-      estado: this.getStatus(),
-      preview: this.getPreview()
+      urgencia: this.urgencia,
+      fecha: this.fecha,
+      estado: this.estado,
+      id_osc: this.id_osc,
+      categoria: this.categoria
     }
   }
 }
