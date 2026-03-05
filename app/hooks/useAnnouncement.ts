@@ -87,6 +87,22 @@ export function useAnnouncement(){
         }
     }, []);
 
-    return { loading, error, announcements, fetchAnnouncements, updateAnnouncement };
+    const createAnnouncement = useCallback(async (announcement: AnnouncementModel) => {
+        try {
+            setLoading(true);
+            const created = await announcementRepository.create(announcement);
+            setAnnouncements((prev) => [...prev, created]);
+            return created;
+        } catch (err) {
+            console.error('[useAnnouncement] create error:', err);
+            setError('Failed to create announcement');
+            return null;
+        }
+        finally {
+            setLoading(false);
+        }
+    }, []);
+
+    return { loading, error, announcements, fetchAnnouncements, updateAnnouncement, createAnnouncement };
 
  }

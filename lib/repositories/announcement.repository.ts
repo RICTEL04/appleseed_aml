@@ -32,6 +32,20 @@ export class AnnouncementRepository{
         return new AnnouncementModel(data)
     }
 
+    async create(announcement: IAnnouncement): Promise<AnnouncementModel> {
+        const supabase = getSupabaseClient()
+        const { data, error } = await supabase
+            .from('avisos')
+            .insert(announcement)
+            .select()
+            //.eq('id_aviso', announcement.id_aviso)
+            .single()
+        if (error) {
+            console.error('Error creating announcement:', error)
+            throw new Error('Failed to create announcement')
+        }
+        return new AnnouncementModel(data)
+    }
 
 }
 
