@@ -5,6 +5,7 @@ export interface IWorker {
   id_trabajador: string
   rol: string
   email: string
+  nombre: string
   created_at: string
 }
 
@@ -12,12 +13,14 @@ export class WorkerModel implements IWorker {
   id_trabajador: string
   rol: string
   email: string
+  nombre: string
   created_at: string
 
   constructor(data: IWorker) {
     this.id_trabajador = data.id_trabajador
     this.rol = data.rol
     this.email = data.email
+    this.nombre = data.nombre
     this.created_at = data.created_at
   }
 
@@ -53,11 +56,8 @@ export class WorkerModel implements IWorker {
     return {
       id: this.id_trabajador,
       email: this.email,
-      rol: this.getRole(),
-      permissions: {
-        manageDonations: this.canManageDonations(),
-        viewReports: this.canViewReports()
-      }
+      nombre: this.nombre,
+      rol: this.rol,
     }
   }
 }
