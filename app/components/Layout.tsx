@@ -12,6 +12,7 @@ export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const appSchema = process.env.NEXT_PUBLIC_SUPABASE_APP_SCHEMA ?? 'public';
 
   const clearLocalSession = () => {
     localStorage.removeItem('appleseed_auth');
@@ -22,21 +23,25 @@ export function Layout() {
 
   useEffect(() => {
     let isMounted = true;
+    let isValidating = false;
+    let lastValidationAt = 0;
 
     const validateSession = async () => {
-      const userType = localStorage.getItem('user_type');
+      if (isValidating) {
+        return;
+      }
+
+      isValidating = true;
 
       if (!isSupabaseConfigured) {
         const auth = localStorage.getItem('appleseed_auth');
         if (!auth) {
           navigate('/login');
+          isValidating = false;
           return;
         }
 
-        if (userType === 'organization') {
-          navigate('/organization');
-        }
-
+        isValidating = false;
         return;
       }
 
@@ -47,9 +52,9 @@ export function Layout() {
           supabase.auth.getUser(),
         ]);
 
-        const hasActiveSession = Boolean(userData.user ?? sessionData.session?.user);
+        const activeUser = userData.user ?? sessionData.session?.user;
 
-        if (sessionError || userError || !hasActiveSession) {
+        if (sessionError || userError || !activeUser) {
           clearLocalSession();
           if (isMounted) {
             navigate('/login');
@@ -57,15 +62,45 @@ export function Layout() {
           return;
         }
 
-        if (userType === 'organization') {
-          navigate('/organization');
+        const { data: workerRow, error: workerError } = await supabase
+          .schema(appSchema)
+          .from('trabajador')
+          .select('id_trabajador')
+          .eq('id_trabajador', activeUser.id)
+          .maybeSingle();
+
+        if (workerError || !workerRow) {
+          clearLocalSession();
+          if (isMounted) {
+            navigate('/login');
+          }
+          return;
         }
+
+        localStorage.setItem('appleseed_auth', 'true');
+        localStorage.setItem('user_type', 'admin');
+        localStorage.removeItem('organization_id');
+        localStorage.removeItem('organization_name');
+
       } catch {
         clearLocalSession();
         if (isMounted) {
           navigate('/login');
         }
+      } finally {
+        isValidating = false;
       }
+    };
+
+    const triggerValidation = () => {
+      const now = Date.now();
+
+      if (now - lastValidationAt < 5000) {
+        return;
+      }
+
+      lastValidationAt = now;
+      void validateSession();
     };
 
     void validateSession();
@@ -88,11 +123,28 @@ export function Layout() {
       }
     });
 
+    const interactionEvents: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'focus'];
+    interactionEvents.forEach((eventName) => {
+      window.addEventListener(eventName, triggerValidation, { passive: true });
+    });
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        triggerValidation();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       isMounted = false;
+      interactionEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, triggerValidation);
+      });
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       authListener.subscription.unsubscribe();
     };
-  }, [navigate]);
+  }, [appSchema, navigate]);
 
   const handleLogout = async () => {
     if (isSupabaseConfigured) {
@@ -145,7 +197,6 @@ export function Layout() {
             </div>
 
             <div className="flex items-center gap-2">
-              <NotificationPanel />
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-3 sm:px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-xl border border-transparent hover:border-gray-200 transition"

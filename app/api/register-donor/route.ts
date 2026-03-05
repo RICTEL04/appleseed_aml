@@ -4,11 +4,12 @@ import { createClient } from '@supabase/supabase-js';
 interface DonorPayload {
   nombre: string;
   rfc: string;
-  apellido_paterno: string;
-  apellido_materno: string;
+  apellido_paterno?: string;
+  apellido_materno?: string;
   fecha_nacimiento: string;
   email: string;
-  telefono: string;
+  telefono?: string;
+  person_type?: 'fisica' | 'moral';
 }
 
 interface AddressPayload {
@@ -61,18 +62,35 @@ function isValidPayload(value: unknown): value is RegisterDonorPayload {
   const donor = payload.donor as unknown as Record<string, unknown>;
   const address = payload.address as unknown as Record<string, unknown>;
 
-  const requiredDonorFields = ['nombre', 'rfc', 'apellido_paterno', 'apellido_materno', 'fecha_nacimiento', 'email', 'telefono'];
+  const requiredDonorFields = ['nombre', 'rfc', 'fecha_nacimiento', 'email'];
   const requiredAddressFields = ['calle', 'num_exterior', 'cp', 'entidad_federativa', 'ciudad_alcaldia'];
 
   const hasValidDonorFields = requiredDonorFields.every(
     (field) => typeof donor[field] === 'string' && (donor[field] as string).trim().length > 0,
   );
 
+  if (!hasValidDonorFields) {
+    return false;
+  }
+
+  const normalizedRfc = String(donor.rfc ?? '').trim().toUpperCase();
+  const inferredPersonType = normalizedRfc.length === 12 ? 'moral' : 'fisica';
+  const personType = donor.person_type === 'fisica' || donor.person_type === 'moral'
+    ? donor.person_type
+    : inferredPersonType;
+
+  const hasRequiredPhysicalFields =
+    personType === 'moral' || (
+      typeof donor.apellido_paterno === 'string' && donor.apellido_paterno.trim().length > 0 &&
+      typeof donor.apellido_materno === 'string' && donor.apellido_materno.trim().length > 0 &&
+      typeof donor.telefono === 'string' && donor.telefono.trim().length > 0
+    );
+
   const hasValidAddressFields = requiredAddressFields.every(
     (field) => typeof address[field] === 'string' && (address[field] as string).trim().length > 0,
   );
 
-  return hasValidDonorFields && hasValidAddressFields && payload.password.trim().length >= 8;
+  return hasRequiredPhysicalFields && hasValidAddressFields && payload.password.trim().length >= 8;
 }
 
 export async function POST(request: Request) {
@@ -88,6 +106,11 @@ export async function POST(request: Request) {
 
     const normalizedEmail = payload.donor.email.trim().toLowerCase();
     const normalizedRFC = payload.donor.rfc.trim().toUpperCase();
+    const personType = payload.donor.person_type === 'fisica' || payload.donor.person_type === 'moral'
+      ? payload.donor.person_type
+      : normalizedRFC.length === 12
+        ? 'moral'
+        : 'fisica';
     const supabaseAdmin = getAdminClient();
 
     const { data: existingDonorByEmail, error: existingDonorByEmailError } = await supabaseAdmin
@@ -197,11 +220,11 @@ export async function POST(request: Request) {
       .insert({
         nombre: payload.donor.nombre.trim(),
         rfc: normalizedRFC,
-        apellido_paterno: payload.donor.apellido_paterno.trim(),
-        apellido_materno: payload.donor.apellido_materno.trim(),
+        apellido_paterno: personType === 'moral' ? '' : (payload.donor.apellido_paterno ?? '').trim(),
+        apellido_materno: personType === 'moral' ? '' : (payload.donor.apellido_materno ?? '').trim(),
         fecha_nacimiento: payload.donor.fecha_nacimiento,
         email: normalizedEmail,
-        telefono: payload.donor.telefono.trim(),
+        telefono: personType === 'moral' ? '' : (payload.donor.telefono ?? '').trim(),
         id_direccion: idDireccion,
       });
 

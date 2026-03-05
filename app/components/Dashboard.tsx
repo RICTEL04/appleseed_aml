@@ -1,39 +1,451 @@
 "use client"
-import { Building2, AlertTriangle, CheckCircle2, TrendingUp } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
+import { Building2, AlertTriangle, CheckCircle2, TrendingUp, Loader2, ShieldAlert, Send, FileCheck2 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase';
+import { useWorker } from '@/app/hooks/useWorker';
 
-const alertsData = [
-  { month: 'Ene', alertas: 12 },
-  { month: 'Feb', alertas: 8 },
-  { month: 'Mar', alertas: 15 },
-  { month: 'Abr', alertas: 6 },
-  { month: 'May', alertas: 10 },
-  { month: 'Jun', alertas: 4 },
-];
+interface DashboardOrganization {
+  id_osc: string;
+  nombre_organizacion: string | null;
+  estado_verificacion: string | null;
+  riesgo: string | null;
+  created_at: string;
+}
 
-const riskData = [
-  { name: 'Bajo', value: 65, color: '#10b981' },
-  { name: 'Medio', value: 25, color: '#f59e0b' },
-  { name: 'Alto', value: 10, color: '#ef4444' },
-];
+interface DashboardDocument {
+  id: string;
+  id_osc: string | null;
+  estado: string | null;
+  vencimiento: string | null;
+  nombre_documento: string | null;
+  created_at: string;
+  id_trabajador: string | null;
+}
 
-const recentOrganizations = [
-  { id: 1, name: 'Fundación Esperanza', status: 'Verificada', risk: 'Bajo' },
-  { id: 2, name: 'ONG Educación Global', status: 'En revisión', risk: 'Medio' },
-  { id: 3, name: 'Asociación Salud para Todos', status: 'Verificada', risk: 'Bajo' },
-  { id: 4, name: 'Centro de Apoyo Comunitario', status: 'Verificada', risk: 'Bajo' },
-];
+interface DashboardAmlAlert {
+  id: string;
+  id_osc: string;
+  umbral: number;
+  monto_acumulado: number;
+  created_at: string | null;
+}
+
+interface DashboardDonation {
+  id_donacion: string;
+  id_osc: string | null;
+  cantidad: number | null;
+  created_at: string;
+}
+
+interface DashboardAnnouncement {
+  id_aviso: string;
+  estado: string | null;
+  urgencia: string | null;
+  remitente: string | null;
+  fecha: string | null;
+}
+
+interface ImmediateAction {
+  id: string;
+  action: string;
+  organization: string;
+  priority: 'Alta' | 'Media' | 'Baja';
+  date: string;
+  route: string;
+}
+
+const normalizeOrgStatus = (status: string | null) => {
+  const normalized = (status ?? '').trim().toLowerCase();
+  if (normalized === 'verificada') return 'Verificada';
+  if (normalized === 'en revisión' || normalized === 'en revision') return 'En revisión';
+  return 'Pendiente';
+};
+
+const normalizeRisk = (risk: string | null): 'Bajo' | 'Medio' | 'Alto' => {
+  const normalized = (risk ?? '').trim().toLowerCase();
+  if (normalized === 'alto') return 'Alto';
+  if (normalized === 'medio') return 'Medio';
+  return 'Bajo';
+};
+
+const normalizeDocumentStatus = (status: string | null): 'aprobado' | 'rechazado' | 'en revisión' | 'pendiente' => {
+  const normalized = (status ?? '').trim().toLowerCase();
+  if (normalized === 'aprobado') return 'aprobado';
+  if (normalized === 'rechazado') return 'rechazado';
+  if (normalized === 'en revisión' || normalized === 'en revision') return 'en revisión';
+  return 'pendiente';
+};
+
+const formatCurrency = (amount: number) => amount.toLocaleString('es-MX', {
+  style: 'currency',
+  currency: 'MXN',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const getMonthKey = (dateValue: string) => {
+  const date = new Date(dateValue);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const PRIORITY_ORDER: Record<ImmediateAction['priority'], number> = {
+  Alta: 0,
+  Media: 1,
+  Baja: 2,
+};
 
 export function Dashboard() {
+  const { worker } = useWorker();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [organizations, setOrganizations] = useState<DashboardOrganization[]>([]);
+  const [documents, setDocuments] = useState<DashboardDocument[]>([]);
+  const [amlAlerts, setAmlAlerts] = useState<DashboardAmlAlert[]>([]);
+  const [donations, setDonations] = useState<DashboardDonation[]>([]);
+  const [announcements, setAnnouncements] = useState<DashboardAnnouncement[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDashboard = async () => {
+      if (!isSupabaseConfigured) {
+        if (isMounted) {
+          setError('Configura Supabase para visualizar el dashboard.');
+          setLoading(false);
+        }
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const supabase = getSupabaseClient();
+        const [orgResponse, docsResponse, alertsResponse, donationsResponse, announcementsResponse] = await Promise.all([
+          supabase
+            .from('osc')
+            .select('id_osc, nombre_organizacion, estado_verificacion, riesgo, created_at')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('documentos')
+            .select('id, id_osc, estado, vencimiento, nombre_documento, created_at, id_trabajador')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('alertas_aml')
+            .select('id, id_osc, umbral, monto_acumulado, created_at')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('donaciones')
+            .select('id_donacion, id_osc, cantidad, created_at')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('avisos')
+            .select('id_aviso, estado, urgencia, remitente, fecha')
+            .order('fecha', { ascending: false })
+            .limit(200),
+        ]);
+
+        if (orgResponse.error) throw orgResponse.error;
+        if (docsResponse.error) throw docsResponse.error;
+        if (alertsResponse.error) throw alertsResponse.error;
+        if (donationsResponse.error) throw donationsResponse.error;
+        if (announcementsResponse.error) throw announcementsResponse.error;
+
+        if (!isMounted) return;
+
+        setOrganizations((orgResponse.data ?? []) as DashboardOrganization[]);
+        setDocuments((docsResponse.data ?? []) as DashboardDocument[]);
+        setAmlAlerts((alertsResponse.data ?? []) as DashboardAmlAlert[]);
+        setDonations((donationsResponse.data ?? []) as DashboardDonation[]);
+        setAnnouncements((announcementsResponse.data ?? []) as DashboardAnnouncement[]);
+      } catch (loadError) {
+        if (!isMounted) return;
+        const message = loadError instanceof Error ? loadError.message : 'No se pudo cargar el dashboard';
+        setError(message);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const organizationsById = useMemo(() => organizations.reduce<Record<string, string>>((acc, org) => {
+    acc[org.id_osc] = org.nombre_organizacion?.trim() || 'Organización sin nombre';
+    return acc;
+  }, {}), [organizations]);
+
+  const organizationsRiskById = useMemo(() => organizations.reduce<Record<string, 'Bajo' | 'Medio' | 'Alto'>>((acc, org) => {
+    acc[org.id_osc] = normalizeRisk(org.riesgo);
+    return acc;
+  }, {}), [organizations]);
+
+  const verificationMetrics = useMemo(() => {
+    const total = organizations.length;
+    const verified = organizations.filter((org) => normalizeOrgStatus(org.estado_verificacion) === 'Verificada').length;
+    const inReview = organizations.filter((org) => normalizeOrgStatus(org.estado_verificacion) === 'En revisión').length;
+    const pending = total - verified - inReview;
+
+    return {
+      total,
+      verified,
+      inReview,
+      pending,
+      coverage: total > 0 ? Math.round((verified / total) * 100) : 0,
+    };
+  }, [organizations]);
+
+  const donationMetrics = useMemo(() => {
+    const totalAmount = donations.reduce((acc, donation) => acc + Number(donation.cantidad ?? 0), 0);
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+
+    const thisMonthAmount = donations.reduce((acc, donation) => {
+      const date = new Date(donation.created_at);
+      if (date.getMonth() === month && date.getFullYear() === year) {
+        return acc + Number(donation.cantidad ?? 0);
+      }
+      return acc;
+    }, 0);
+
+    return {
+      totalAmount,
+      thisMonthAmount,
+      totalCount: donations.length,
+    };
+  }, [donations]);
+
+  const performanceMetrics = useMemo(() => {
+    const reviewedByCurrentWorker = worker
+      ? documents.filter((doc) => doc.id_trabajador === worker.id_trabajador)
+      : [];
+
+    const approvedByCurrentWorker = reviewedByCurrentWorker.filter((doc) => normalizeDocumentStatus(doc.estado) === 'aprobado').length;
+    const approvalRate = reviewedByCurrentWorker.length > 0
+      ? Math.round((approvedByCurrentWorker / reviewedByCurrentWorker.length) * 100)
+      : 0;
+
+    const announcementsByCurrentWorker = worker?.nombre
+      ? announcements.filter((announcement) => (announcement.remitente ?? '').trim() === worker.nombre.trim()).length
+      : 0;
+
+    const unreadAnnouncements = announcements
+      .filter((announcement) => (announcement.estado ?? '').trim().toLowerCase() !== 'leido')
+      .length;
+
+    return {
+      reviewedByCurrentWorker: reviewedByCurrentWorker.length,
+      approvedByCurrentWorker,
+      approvalRate,
+      announcementsByCurrentWorker,
+      unreadAnnouncements,
+    };
+  }, [documents, worker, announcements]);
+
+  const riskData = useMemo(() => {
+    const counters = organizations.reduce<Record<'Bajo' | 'Medio' | 'Alto', number>>((acc, org) => {
+      const risk = normalizeRisk(org.riesgo);
+      acc[risk] += 1;
+      return acc;
+    }, { Bajo: 0, Medio: 0, Alto: 0 });
+
+    return [
+      { name: 'Bajo', value: counters.Bajo, color: '#10b981' },
+      { name: 'Medio', value: counters.Medio, color: '#f59e0b' },
+      { name: 'Alto', value: counters.Alto, color: '#ef4444' },
+    ].filter((entry) => entry.value > 0);
+  }, [organizations]);
+
+  const monthlyTrendData = useMemo(() => {
+    const baseDate = new Date();
+    const monthKeys: string[] = [];
+
+    for (let index = 5; index >= 0; index -= 1) {
+      const currentDate = new Date(baseDate.getFullYear(), baseDate.getMonth() - index, 1);
+      monthKeys.push(`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`);
+    }
+
+    const accumulator = monthKeys.reduce<Record<string, { nuevasOsc: number; alertas: number }>>((acc, key) => {
+      acc[key] = { nuevasOsc: 0, alertas: 0 };
+      return acc;
+    }, {});
+
+    organizations.forEach((org) => {
+      const key = getMonthKey(org.created_at);
+      if (accumulator[key]) accumulator[key].nuevasOsc += 1;
+    });
+
+    amlAlerts.forEach((alert) => {
+      if (!alert.created_at) return;
+      const key = getMonthKey(alert.created_at);
+      if (accumulator[key]) accumulator[key].alertas += 1;
+    });
+
+    return monthKeys.map((key) => {
+      const [year, month] = key.split('-');
+      const label = new Date(Number(year), Number(month) - 1, 1).toLocaleDateString('es-MX', { month: 'short' });
+      return {
+        month: label.charAt(0).toUpperCase() + label.slice(1),
+        nuevasOsc: accumulator[key].nuevasOsc,
+        alertas: accumulator[key].alertas,
+      };
+    });
+  }, [organizations, amlAlerts]);
+
+  const documentsByStatusData = useMemo(() => {
+    const counters = documents.reduce<Record<'aprobado' | 'rechazado' | 'en revisión' | 'pendiente', number>>((acc, doc) => {
+      const status = normalizeDocumentStatus(doc.estado);
+      acc[status] += 1;
+      return acc;
+    }, { aprobado: 0, rechazado: 0, 'en revisión': 0, pendiente: 0 });
+
+    return [
+      { status: 'Aprobado', total: counters.aprobado, color: '#10b981' },
+      { status: 'En revisión', total: counters['en revisión'], color: '#3b82f6' },
+      { status: 'Pendiente', total: counters.pendiente, color: '#f59e0b' },
+      { status: 'Rechazado', total: counters.rechazado, color: '#ef4444' },
+    ];
+  }, [documents]);
+
+  const alertsByThresholdData = useMemo(() => {
+    const grouped = amlAlerts.reduce<Record<string, number>>((acc, alert) => {
+      const key = `Umbral ${alert.umbral}`;
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(grouped)
+      .map(([threshold, total]) => ({ threshold, total }))
+      .sort((first, second) => first.threshold.localeCompare(second.threshold));
+  }, [amlAlerts]);
+
+  const donationsByRiskData = useMemo(() => {
+    const riskTotals = donations.reduce<Record<'Bajo' | 'Medio' | 'Alto', number>>((acc, donation) => {
+      if (!donation.id_osc) return acc;
+      const risk = organizationsRiskById[donation.id_osc] ?? 'Bajo';
+      acc[risk] += Number(donation.cantidad ?? 0);
+      return acc;
+    }, { Bajo: 0, Medio: 0, Alto: 0 });
+
+    return [
+      { name: 'Bajo', value: Number(riskTotals.Bajo.toFixed(2)), color: '#10b981' },
+      { name: 'Medio', value: Number(riskTotals.Medio.toFixed(2)), color: '#f59e0b' },
+      { name: 'Alto', value: Number(riskTotals.Alto.toFixed(2)), color: '#ef4444' },
+    ].filter((entry) => entry.value > 0);
+  }, [donations, organizationsRiskById]);
+
+  const immediateActions = useMemo<ImmediateAction[]>(() => {
+    const actions: ImmediateAction[] = [];
+
+    amlAlerts
+      .filter((alert) => alert.umbral >= 2)
+      .slice(0, 4)
+      .forEach((alert) => {
+        actions.push({
+          id: `alert-${alert.id}`,
+          action: `Revisar alerta AML (Umbral ${alert.umbral})`,
+          organization: organizationsById[alert.id_osc] ?? 'Organización no encontrada',
+          priority: 'Alta',
+          date: alert.created_at ?? new Date().toISOString(),
+          route: '/organizations',
+        });
+      });
+
+    documents
+      .filter((doc) => {
+        const status = normalizeDocumentStatus(doc.estado);
+        return status === 'pendiente' || status === 'en revisión' || status === 'rechazado';
+      })
+      .slice(0, 5)
+      .forEach((doc) => {
+        const status = normalizeDocumentStatus(doc.estado);
+        const isHigh = status === 'rechazado' || (doc.vencimiento ? new Date(doc.vencimiento).getTime() < Date.now() : false);
+
+        actions.push({
+          id: `doc-${doc.id}`,
+          action: status === 'rechazado'
+            ? 'Dar seguimiento a documento rechazado'
+            : status === 'en revisión'
+              ? 'Cerrar revisión documental en curso'
+              : 'Revisar documento pendiente',
+          organization: doc.id_osc ? (organizationsById[doc.id_osc] ?? 'Organización no encontrada') : 'Organización no encontrada',
+          priority: isHigh ? 'Alta' : 'Media',
+          date: doc.vencimiento ?? doc.created_at,
+          route: '/organizations',
+        });
+      });
+
+    organizations
+      .filter((org) => normalizeOrgStatus(org.estado_verificacion) !== 'Verificada')
+      .slice(0, 5)
+      .forEach((org) => {
+        actions.push({
+          id: `org-${org.id_osc}`,
+          action: normalizeOrgStatus(org.estado_verificacion) === 'En revisión'
+            ? 'Resolver organización en revisión'
+            : 'Validar organización pendiente',
+          organization: org.nombre_organizacion?.trim() || 'Organización sin nombre',
+          priority: normalizeOrgStatus(org.estado_verificacion) === 'En revisión' ? 'Media' : 'Baja',
+          date: org.created_at,
+          route: '/organizations',
+        });
+      });
+
+    return actions
+      .sort((first, second) => {
+        const priorityDiff = PRIORITY_ORDER[first.priority] - PRIORITY_ORDER[second.priority];
+        if (priorityDiff !== 0) return priorityDiff;
+        return new Date(second.date).getTime() - new Date(first.date).getTime();
+      })
+      .slice(0, 8);
+  }, [amlAlerts, documents, organizations, organizationsById]);
+
+  const recentOrganizations = useMemo(() => organizations.slice(0, 6), [organizations]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-emerald-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Cargando dashboard del trabajador...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-700">
+        <p className="font-medium mb-2">No fue posible cargar el dashboard</p>
+        <p className="text-sm">{error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-        <p className="text-gray-600">Resumen general de prevención de lavado de dinero</p>
+      <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl shadow-lg p-6 sm:p-8 text-white">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-2">
+          Bienvenido, a Appleseed Mexico
+        </h1>
+        <p className="text-emerald-50">
+          Panorama general de organizaciones, alertas AML y prioridades operativas del día.
+        </p>
+        <div className="mt-3 text-sm text-emerald-100 flex flex-wrap gap-x-4 gap-y-1">
+          <span>{worker?.nombre || 'equipo de cumplimiento'}</span>
+        </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
@@ -41,9 +453,9 @@ export function Dashboard() {
               <Building2 className="w-6 h-6 text-emerald-600" />
             </div>
           </div>
-          <p className="text-gray-600 text-sm mb-1">Organizaciones Registradas</p>
-          <p className="text-3xl font-bold text-gray-900">124</p>
-          <p className="text-emerald-600 text-sm mt-2">+12 este mes</p>
+          <p className="text-gray-600 text-sm mb-1">OSC Registradas</p>
+          <p className="text-3xl font-bold text-gray-900">{verificationMetrics.total}</p>
+          <p className="text-emerald-600 text-sm mt-2">{verificationMetrics.verified} verificadas</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -52,9 +464,9 @@ export function Dashboard() {
               <AlertTriangle className="w-6 h-6 text-red-600" />
             </div>
           </div>
-          <p className="text-gray-600 text-sm mb-1">Alertas Activas</p>
-          <p className="text-3xl font-bold text-gray-900">4</p>
-          <p className="text-red-600 text-sm mt-2">Requieren atención</p>
+          <p className="text-gray-600 text-sm mb-1">Alertas AML</p>
+          <p className="text-3xl font-bold text-gray-900">{amlAlerts.length}</p>
+          <p className="text-red-600 text-sm mt-2">{immediateActions.filter((item) => item.priority === 'Alta').length} acciones alta prioridad</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -63,9 +475,9 @@ export function Dashboard() {
               <CheckCircle2 className="w-6 h-6 text-blue-600" />
             </div>
           </div>
-          <p className="text-gray-600 text-sm mb-1">Verificaciones Completas</p>
-          <p className="text-3xl font-bold text-gray-900">98</p>
-          <p className="text-blue-600 text-sm mt-2">79% del total</p>
+          <p className="text-gray-600 text-sm mb-1">Cobertura Verificación</p>
+          <p className="text-3xl font-bold text-gray-900">{verificationMetrics.coverage}%</p>
+          <p className="text-blue-600 text-sm mt-2">{verificationMetrics.inReview} en revisión · {verificationMetrics.pending} pendientes</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -74,35 +486,34 @@ export function Dashboard() {
               <TrendingUp className="w-6 h-6 text-purple-600" />
             </div>
           </div>
-          <p className="text-gray-600 text-sm mb-1">Índice de Cumplimiento</p>
-          <p className="text-3xl font-bold text-gray-900">94%</p>
-          <p className="text-purple-600 text-sm mt-2">+3% vs mes anterior</p>
+          <p className="text-gray-600 text-sm mb-1">Donaciones del Mes</p>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(donationMetrics.thisMonthAmount)}</p>
+          <p className="text-purple-600 text-sm mt-2">{donationMetrics.totalCount} donaciones registradas</p>
         </div>
       </div>
 
-      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Bar Chart */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-6">Alertas Mensuales</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Tendencia Operativa (6 meses)</h2>
+          <p className="text-sm text-gray-600 mb-6">Nuevas OSC registradas vs alertas AML generadas.</p>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={alertsData}>
+            <BarChart data={monthlyTrendData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" stroke="#6b7280" />
               <YAxis stroke="#6b7280" />
-              <Tooltip 
+              <Tooltip
                 contentStyle={{ 
                   backgroundColor: '#fff', 
                   border: '1px solid #e5e7eb',
                   borderRadius: '8px'
                 }}
               />
-              <Bar dataKey="alertas" fill="#10b981" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="nuevasOsc" fill="#14b8a6" radius={[8, 8, 0, 0]} name="Nuevas OSC" />
+              <Bar dataKey="alertas" fill="#f59e0b" radius={[8, 8, 0, 0]} name="Alertas AML" />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Pie Chart */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-6">Distribución por Nivel de Riesgo</h2>
           <ResponsiveContainer width="100%" height={300}>
@@ -128,7 +539,153 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Recent Organizations */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Estado Documental</h2>
+          <p className="text-sm text-gray-600 mb-4">Distribución de documentos por estado operativo.</p>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={documentsByStatusData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="status" stroke="#6b7280" />
+              <YAxis allowDecimals={false} stroke="#6b7280" />
+              <Tooltip />
+              <Bar dataKey="total" radius={[8, 8, 0, 0]}>
+                {documentsByStatusData.map((entry) => (
+                  <Cell key={entry.status} fill={entry.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Alertas por Umbral</h2>
+          <p className="text-sm text-gray-600 mb-4">Frecuencia de alertas AML por tipo de umbral.</p>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={alertsByThresholdData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="threshold" stroke="#6b7280" />
+              <YAxis allowDecimals={false} stroke="#6b7280" />
+              <Tooltip />
+              <Line type="monotone" dataKey="total" stroke="#7c3aed" strokeWidth={3} dot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Donaciones por Riesgo</h2>
+          <p className="text-sm text-gray-600 mb-4">Monto donado acumulado según perfil de riesgo OSC.</p>
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie
+                data={donationsByRiskData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={78}
+                label={({ name, value }) => `${name} ${formatCurrency(Number(value ?? 0))}`}
+              >
+                {donationsByRiskData.map((entry) => (
+                  <Cell key={entry.name} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+            </PieChart>
+          </ResponsiveContainer>
+          {donationsByRiskData.length === 0 && (
+            <p className="text-xs text-gray-500 mt-2">Aún no hay donaciones vinculadas a OSC para graficar.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+        <div className="xl:col-span-3 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-gray-900">Acciones Inmediatas</h2>
+            <Link to="/organizations" className="text-sm font-medium text-emerald-600 hover:text-emerald-700">
+              Ir a Organizaciones
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Acción</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Organización</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Prioridad</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {immediateActions.map((item) => (
+                  <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-4 px-4 text-gray-900 text-sm font-medium">{item.action}</td>
+                    <td className="py-4 px-4 text-sm text-gray-700">{item.organization}</td>
+                    <td className="py-4 px-4">
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                        item.priority === 'Alta'
+                          ? 'bg-red-100 text-red-700'
+                          : item.priority === 'Media'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {item.priority}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-sm text-gray-700">
+                      {new Date(item.date).toLocaleDateString('es-MX', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {immediateActions.length === 0 && (
+            <div className="mt-4 text-sm text-gray-500">No hay acciones urgentes por ahora.</div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-gray-900">Desempeño</h2>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div className="flex items-center gap-2 text-gray-700 mb-2">
+              <FileCheck2 className="w-4 h-4 text-emerald-600" />
+              <p className="text-sm font-medium">Revisiones realizadas</p>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{performanceMetrics.reviewedByCurrentWorker}</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div className="flex items-center gap-2 text-gray-700 mb-2">
+              <CheckCircle2 className="w-4 h-4 text-blue-600" />
+              <p className="text-sm font-medium">Tasa de aprobación</p>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{performanceMetrics.approvalRate}%</p>
+            <p className="text-xs text-gray-500 mt-1">{performanceMetrics.approvedByCurrentWorker} aprobados por ti</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div className="flex items-center gap-2 text-gray-700 mb-2">
+              <Send className="w-4 h-4 text-purple-600" />
+              <p className="text-sm font-medium">Avisos enviados</p>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{performanceMetrics.announcementsByCurrentWorker}</p>
+            <p className="text-xs text-gray-500 mt-1">{performanceMetrics.unreadAnnouncements} avisos no leídos en el sistema</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div className="flex items-center gap-2 text-gray-700 mb-2">
+              <ShieldAlert className="w-4 h-4 text-red-600" />
+              <p className="text-sm font-medium">Riesgo monitoreado</p>
+            </div>
+            <p className="text-base font-semibold text-gray-900">{formatCurrency(donationMetrics.totalAmount)}</p>
+            <p className="text-xs text-gray-500 mt-1">Monto histórico de donaciones observado</p>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-6">Organizaciones Recientes</h2>
         <div className="overflow-x-auto">
@@ -141,31 +698,37 @@ export function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {recentOrganizations.map((org) => (
-                <tr key={org.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-4 px-4 text-gray-900">{org.name}</td>
+              {recentOrganizations.map((org) => {
+                const status = normalizeOrgStatus(org.estado_verificacion);
+                const risk = normalizeRisk(org.riesgo);
+
+                return (
+                <tr key={org.id_osc} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-4 px-4 text-gray-900">{org.nombre_organizacion || 'Sin nombre'}</td>
                   <td className="py-4 px-4">
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                      org.status === 'Verificada' 
+                      status === 'Verificada' 
                         ? 'bg-emerald-100 text-emerald-700' 
-                        : 'bg-yellow-100 text-yellow-700'
+                        : status === 'En revisión'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-gray-100 text-gray-700'
                     }`}>
-                      {org.status}
+                      {status}
                     </span>
                   </td>
                   <td className="py-4 px-4">
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                      org.risk === 'Bajo' 
+                      risk === 'Bajo' 
                         ? 'bg-green-100 text-green-700' 
-                        : org.risk === 'Medio'
+                        : risk === 'Medio'
                         ? 'bg-orange-100 text-orange-700'
                         : 'bg-red-100 text-red-700'
                     }`}>
-                      {org.risk}
+                      {risk}
                     </span>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>

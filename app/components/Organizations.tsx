@@ -7,6 +7,7 @@ import { useOrganizations } from '../hooks/useOrganizations';
 import { useWorker } from '@/app/hooks/useWorker';
 import { OrganizationModel } from '@/lib/models/organization.model';
 import { DirectionModel } from '@/lib/models/direction.model';
+import { getSupabaseClient } from '@/lib/supabase';
 import { OrganizationModal } from '@/app/components/Organizationmodal';
 import { BulkAnnouncementModal } from '@/app/components/Bulkannouncementmodal';
 import { SingleAnnouncementModal } from '@/app/components/Singleannouncementmodal';
@@ -21,7 +22,21 @@ interface OrganizationDetail {
   status: 'Verificada' | 'En revisión' | 'Pendiente';
   risk: 'Bajo' | 'Medio' | 'Alto';
   registrationDate: string;
+    pendingReviewDocuments: number;
 }
+
+const normalizeRiskLevel = (riskValue: string | null | undefined): 'Bajo' | 'Medio' | 'Alto' => {
+    const normalized = (riskValue ?? '').trim().toLowerCase();
+    if (normalized === 'alto') return 'Alto';
+    if (normalized === 'medio') return 'Medio';
+    return 'Bajo';
+};
+
+const riskPriority = (risk: 'Bajo' | 'Medio' | 'Alto'): number => {
+    if (risk === 'Alto') return 0;
+    if (risk === 'Medio') return 1;
+    return 2;
+};
 
 export function Organizations() {
     const { loading, error, allOrganizationsWithDirections } = useOrganizations();
@@ -42,6 +57,30 @@ export function Organizations() {
             setLoadingDirections(true);
             try {
                 const data = await allOrganizationsWithDirections();
+                const orgIds = data.map(([organization]: [OrganizationModel, DirectionModel | null]) => organization.id_osc);
+
+                const pendingByOrg = new Map<string, number>();
+
+                if (orgIds.length > 0) {
+                    const supabase = getSupabaseClient();
+                    const { data: docsData, error: docsError } = await supabase
+                        .from('documentos')
+                        .select('id_osc, estado')
+                        .in('id_osc', orgIds);
+
+                    if (docsError) {
+                        throw docsError;
+                    }
+
+                    (docsData ?? []).forEach((doc: { id_osc: string | null; estado: string | null }) => {
+                        if (!doc.id_osc) return;
+                        const status = (doc.estado ?? '').trim().toLowerCase();
+                        const isInReview = status === 'en revisión' || status === 'en revision';
+                        if (!isInReview) return;
+                        pendingByOrg.set(doc.id_osc, (pendingByOrg.get(doc.id_osc) ?? 0) + 1);
+                    });
+                }
+
                 const mapped = data.map(([organization, direction]: [OrganizationModel, DirectionModel | null]) => ({
                     id: organization.id_osc,
                     name: organization.nombre_organizacion || '',
@@ -50,8 +89,9 @@ export function Organizations() {
                     email: organization.email || '',
                     location: direction ? direction.formatAddress() : 'Dirección no disponible',
                     status: (organization.estado_verificacion || 'Pendiente') as 'Verificada' | 'En revisión' | 'Pendiente',
-                    risk: (organization.riesgo || 'Bajo') as 'Bajo' | 'Medio' | 'Alto',
+                    risk: normalizeRiskLevel(organization.riesgo),
                     registrationDate: organization.created_at || new Date().toISOString(),
+                    pendingReviewDocuments: pendingByOrg.get(organization.id_osc) ?? 0,
                 }));
                 setOrganizationsWithDirections(mapped);
             } catch (err) {
@@ -63,13 +103,33 @@ export function Organizations() {
         fetchData();
     }, [allOrganizationsWithDirections]);
 
-    const filteredOrganizations = organizationsWithDirections.filter((org) => {
-        const matchesSearch =
-            org.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            org.location.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesFilter = filterStatus === 'all' || org.status === filterStatus;
-        return matchesSearch && matchesFilter;
-    });
+    const filteredOrganizations = organizationsWithDirections
+        .filter((org) => {
+            const matchesSearch =
+                org.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                org.location.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesFilter = filterStatus === 'all' || org.status === filterStatus;
+            return matchesSearch && matchesFilter;
+        })
+        .sort((a, b) => {
+            const aHasReviewDocs = a.pendingReviewDocuments > 0 ? 0 : 1;
+            const bHasReviewDocs = b.pendingReviewDocuments > 0 ? 0 : 1;
+            if (aHasReviewDocs !== bHasReviewDocs) {
+                return aHasReviewDocs - bHasReviewDocs;
+            }
+
+            const aRiskPriority = riskPriority(a.risk);
+            const bRiskPriority = riskPriority(b.risk);
+            if (aRiskPriority !== bRiskPriority) {
+                return aRiskPriority - bRiskPriority;
+            }
+
+            if (a.pendingReviewDocuments !== b.pendingReviewDocuments) {
+                return b.pendingReviewDocuments - a.pendingReviewDocuments;
+            }
+
+            return new Date(b.registrationDate).getTime() - new Date(a.registrationDate).getTime();
+        });
 
     const allOrgIds = organizationsWithDirections.map(o => o.id);
 
@@ -99,55 +159,59 @@ export function Organizations() {
         <>
             <div className="space-y-6">
                 {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <h1 className="text-3xl font-bold text-gray-900 mb-2">Organizaciones</h1>
-                        <p className="text-gray-600">Gestiona y supervisa las organizaciones registradas</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => setShowBulkModal(true)}
-                            disabled={allOrgIds.length === 0}
-                            className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-white border border-emerald-600 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium transition"
-                        >
-                            <Send className="w-4 h-4" />
-                            Aviso General
-                        </button>
-                        <Link
-                            to="/organizations/register"
-                            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition shadow-lg shadow-emerald-600/30"
-                        >
-                            <Plus className="w-5 h-5" />
-                            Registrar Organización
-                        </Link>
-                    </div>
-                </div>
-
-                {/* Search and Filter */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <div className="flex-1 relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Buscar por nombre o ubicación..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-                            />
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    <div className="h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500" />
+                    <div className="px-5 py-4 sm:px-6 sm:py-5">
+                        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+                            <div className="xl:pr-4">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">Organizaciones</h1>
+                                <p className="text-sm sm:text-base text-gray-600">Gestiona y supervisa las organizaciones registradas</p>
+                            </div>
+                            <div className="w-full xl:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                <button
+                                    onClick={() => setShowBulkModal(true)}
+                                    disabled={allOrgIds.length === 0}
+                                    className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-white border border-emerald-600 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium transition"
+                                >
+                                    <Send className="w-4 h-4" />
+                                    Aviso General
+                                </button>
+                                <Link
+                                    to="/organizations/register"
+                                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition shadow-lg shadow-emerald-600/30"
+                                >
+                                    <Plus className="w-5 h-5" />
+                                    Registrar Organización
+                                </Link>
+                            </div>
                         </div>
-                        <div className="relative sm:w-48">
-                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                            <select
-                                value={filterStatus}
-                                onChange={(e) => setFilterStatus(e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none appearance-none bg-white"
-                            >
-                                <option value="all">Todos los estados</option>
-                                <option value="Verificada">Verificada</option>
-                                <option value="En revisión">En revisión</option>
-                                <option value="Pendiente">Pendiente</option>
-                            </select>
+
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <div className="flex-1 relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar por nombre o ubicación..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+                                    />
+                                </div>
+                                <div className="relative sm:w-48">
+                                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                    <select
+                                        value={filterStatus}
+                                        onChange={(e) => setFilterStatus(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none appearance-none bg-white"
+                                    >
+                                        <option value="all">Todos los estados</option>
+                                        <option value="Verificada">Verificada</option>
+                                        <option value="En revisión">En revisión</option>
+                                        <option value="Pendiente">Pendiente</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -200,6 +264,16 @@ export function Organizations() {
                                             : 'bg-red-100 text-red-700'
                                         }`}>
                                             {org.risk}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-500">Docs en revisión</p>
+                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mt-1 ${
+                                            org.pendingReviewDocuments > 0
+                                                ? 'bg-yellow-100 text-yellow-700'
+                                                : 'bg-emerald-100 text-emerald-700'
+                                        }`}>
+                                            {org.pendingReviewDocuments}
                                         </span>
                                     </div>
                                     <div className="text-right">

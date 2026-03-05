@@ -80,6 +80,32 @@ export function DocumentViewer({ orgId, worker }: DocumentViewerProps) {
         id_trabajador: worker?.id_trabajador ?? undefined,
       } as DocumentModel);
 
+      const documentName =
+        active.doc.nombre_documento?.trim() ||
+        active.doc.tipo_documento?.trim() ||
+        'Documento';
+
+      const reviewerName = worker?.nombre?.trim() || 'Equipo de validación';
+
+      const notifyResponse = await fetch('/api/send-document-review-notification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          organizationId: orgId,
+          documentName,
+          status: review.estado,
+          reviewerName,
+        }),
+      });
+
+      if (!notifyResponse.ok) {
+        const notifyResult = (await notifyResponse.json().catch(() => null)) as { message?: string } | null;
+        const notifyMessage = notifyResult?.message || 'No se pudo notificar a la organización por correo y/o aviso.';
+        throw new Error(notifyMessage);
+      }
+
       // Refetch all documents to get the updated data
       setRefreshing(true);
       await fetchDocuments();
@@ -87,7 +113,8 @@ export function DocumentViewer({ orgId, worker }: DocumentViewerProps) {
       setSavedId(active.doc.id ?? null);
       setReview(EMPTY_REVIEW);
     } catch (error) {
-      setReviewError('No se pudo guardar la revisión. Intenta de nuevo.');
+      const message = error instanceof Error ? error.message : 'No se pudo guardar la revisión. Intenta de nuevo.';
+      setReviewError(message);
       console.error('Error saving review:', error);
     } finally {
       setSaving(false);
