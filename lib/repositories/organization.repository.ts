@@ -5,11 +5,15 @@ import { IOrganization, OrganizationModel } from '../models/organization.model'
 
 export class OrganizationRepository {
 
+    private getOrganizationTableName(): string {
+        return process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc'
+    }
+
     //get all organizations
     async getAll(): Promise<OrganizationModel[]> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
-            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || '')
+            .from(this.getOrganizationTableName())
             .select('*').order('created_at', { ascending: false })
         console.log('Supabase response:', { data, error })
         if (error) {
@@ -24,7 +28,7 @@ export class OrganizationRepository {
         const supabase = getSupabaseClient()
         console.log(id, "is it good?")
         const {data, error} = await supabase
-            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc')
+            .from(this.getOrganizationTableName())
             .select('*')
             .eq('id_osc', id)
             .single()
@@ -40,7 +44,7 @@ export class OrganizationRepository {
         const supabase = getSupabaseClient()
         const { id_osc, ...fields } = organization as any
         const { data, error } = await supabase
-        .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc')
+        .from(this.getOrganizationTableName())
         .update(fields)
         .eq('id_osc', id_osc)
         .select()
@@ -55,7 +59,7 @@ export class OrganizationRepository {
     async getAllWithDirections(): Promise<[OrganizationModel, DirectionModel | null][]> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
-            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc')
+            .from(this.getOrganizationTableName())
             .select(`
             *,
             direccion (*)
@@ -78,7 +82,7 @@ export class OrganizationRepository {
     async setDirection(id_osc: string, id_direccion: string): Promise<OrganizationModel> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
-            .from(process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc')
+            .from(this.getOrganizationTableName())
             .update({ id_direccion })
             .eq('id_osc', id_osc)
             .select()
