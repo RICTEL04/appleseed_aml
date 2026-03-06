@@ -19,7 +19,12 @@ export const metadata: Metadata = {
   },
   description: "appleseed aml",
   icons: {
-    icon: "/appleseed.png",
+    icon: [
+      { url: "/appleseed.png", type: "image/png" },
+      { url: "/icon.png", type: "image/png" },
+    ],
+    shortcut: "/appleseed.png",
+    apple: "/appleseed.png",
   },
 };
 
