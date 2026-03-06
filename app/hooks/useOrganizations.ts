@@ -64,10 +64,9 @@ export function useOrganizations() {
             const org = await organizationRepository.getById(userId);
             console.log('[useOrganizations] org =>', org);
             setOrganization(org);
-            setError(null);
         } catch (err) {
             console.error('[useOrganizations] getById error:', err);
-            setError('Failed to fetch organization');
+            setOrganization(null);
         } finally {
             setLoading(false);
         }
