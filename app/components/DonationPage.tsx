@@ -248,6 +248,55 @@ export function DonationPage() {
       .find((character) => vowels.includes(character));
   };
 
+  const getDatePartForRFC = (dateValue: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+      return null;
+    }
+
+    return `${dateValue.slice(2, 4)}${dateValue.slice(5, 7)}${dateValue.slice(8, 10)}`;
+  };
+
+  const generateRFCFromFormData = () => {
+    const datePart = getDatePartForRFC(donorData.fecha_nacimiento);
+
+    if (!datePart) {
+      setValidationError(donorPersonType === 'moral'
+        ? 'Ingresa una fecha de creación válida para generar el RFC.'
+        : 'Ingresa una fecha de nacimiento válida para generar el RFC.');
+      return;
+    }
+
+    if (donorPersonType === 'moral') {
+      const normalizedOrgName = normalizeLetters(donorData.firstName.trim());
+
+      if (normalizedOrgName.length < 3) {
+        setValidationError('El nombre de la organización debe tener al menos 3 letras para generar el RFC.');
+        return;
+      }
+
+      const generatedRFC = `${normalizedOrgName.slice(0, 3)}${datePart}000`;
+      setDonorData((current) => ({ ...current, rfc: generatedRFC }));
+      setValidationError('');
+      return;
+    }
+
+    const normalizedLastName = normalizeLetters(donorData.lastName.trim());
+    const normalizedSecondLastName = normalizeLetters(donorData.secondLastName.trim());
+    const normalizedFirstName = normalizeLetters(donorData.firstName.trim());
+
+    if (normalizedLastName.length < 2 || normalizedSecondLastName.length < 1 || normalizedFirstName.length < 1) {
+      setValidationError('Completa nombre(s), apellido paterno y apellido materno para generar el RFC.');
+      return;
+    }
+
+    const internalVowel = findFirstInternalVowel(normalizedLastName) ?? 'X';
+    const prefix = `${normalizedLastName.slice(0, 1)}${internalVowel}${normalizedSecondLastName.slice(0, 1)}${normalizedFirstName.slice(0, 1)}`;
+    const generatedRFC = `${prefix}${datePart}000`;
+
+    setDonorData((current) => ({ ...current, rfc: generatedRFC }));
+    setValidationError('');
+  };
+
   const getRegisterFieldErrors = (): RegisterFieldErrors => {
     const errors: RegisterFieldErrors = {};
     const isMoralPerson = donorPersonType === 'moral';
@@ -1873,9 +1922,18 @@ export function DonationPage() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            RFC *
-                          </label>
+                          <div className="flex items-center justify-between mb-2 gap-3">
+                            <label className="block text-sm font-medium text-gray-700">
+                              RFC *
+                            </label>
+                            <button
+                              type="button"
+                              onClick={generateRFCFromFormData}
+                              className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition"
+                            >
+                              Generar RFC
+                            </button>
+                          </div>
                           <input
                             type="text"
                             name="rfc"
