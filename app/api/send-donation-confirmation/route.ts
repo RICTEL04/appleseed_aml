@@ -1,5 +1,11 @@
+// Archivo: app/api/send-donation-confirmation/route.ts
+//este archivo define una ruta API para enviar una confirmación de donación al donante, utilizando el servicio de Resend para el envío de correos,
+//incluye la validación del payload recibido para asegurarse de que se proporcionen todos los campos requeridos y que tengan el formato correcto,
+//si el envío del correo falla, se devuelve un error con el mensaje correspondiente.
 import { NextResponse } from 'next/server';
 
+// Definicion de tipos del payload esperado para enviar una confirmación de donación,
+// incluyendo validaciones básicas de formato y campos requeridos.
 interface DonationConfirmationPayload {
   donorEmail: string;
   donorName: string;
@@ -12,6 +18,9 @@ interface DonationConfirmationPayload {
 const resendApiKey = process.env.RESEND_API_KEY;
 const senderEmail = process.env.DONATIONS_FROM_EMAIL ?? 'donaciones@appleseed.mx';
 
+//funcion para validar que el payload recibido en la solicitud POST
+//cumple con los requisitos necesarios para enviar una confirmación de donación,
+//asegurando que se proporcionen todos los campos requeridos, que tengan el formato correcto y que el monto sea un número positivo.
 function isValidPayload(value: unknown): value is DonationConfirmationPayload {
   if (!value || typeof value !== 'object') {
     return false;
@@ -36,6 +45,10 @@ function isValidPayload(value: unknown): value is DonationConfirmationPayload {
   );
 }
 
+//funcion para manejar las solicitudes POST a esta ruta,
+//que se encarga de enviar un correo de confirmación de donación al donante,
+//utilizando el servicio de Resend para el envío de correos,
+//si el envío del correo falla, se devuelve un error con el mensaje correspondiente.
 export async function POST(request: Request) {
   try {
     if (!resendApiKey) {

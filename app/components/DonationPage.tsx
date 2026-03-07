@@ -1,3 +1,8 @@
+// components/DonationPage.tsx
+// Este componente es la página principal para realizar donaciones a las organizaciones registradas,
+// incluye un proceso de donación en varios pasos con autenticación de donantes, selección de monto, método de pago y confirmación,
+// también muestra el historial de donaciones del donante, validación de RFC contra lista negra y generación de comprobantes fiscales digitales (CFDI).
+
 "use client"
 
 import { useState, useEffect } from 'react';

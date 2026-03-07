@@ -1,3 +1,4 @@
+//listado de entidades federativas
 
 export type EntidadFederativa =
     | 'Aguascalientes'

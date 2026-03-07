@@ -1,4 +1,7 @@
 // components/BulkAnnouncementModal.tsx
+// Este componente es un modal para enviar un aviso general a todas las organizaciones registradas,
+// muestra el número de organizaciones a las que se enviará el aviso, incluye un formulario para ingresar el título, mensaje, categoría y urgencia del aviso,
+// y maneja el envío del aviso a través del componente AnnouncementForm, además de permitir cerrar el modal al hacer clic fuera o presionar la tecla Escape.
 'use client'
 
 import { useEffect } from 'react';

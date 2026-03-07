@@ -1,6 +1,12 @@
+// Archivo: app/api/send-document-review-notification/route.ts
+//este archivo define una ruta API para enviar una notificación a una organización sobre el resultado de la revisión de un documento,incluye la creación de un aviso en la base de datos y el envío de un correo electrónico,
+//si el documento aprobado es el reporte de donador al SAT, también se recalcula el nivel de riesgo de la organización.
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+// Definicion de tipos del payload esperado para la notificación de revisión de documentos,
+// incluyendo validaciones básicas de formato y campos requeridos.
 interface DocumentReviewNotificationPayload {
   organizationId: string;
   documentName: string;
@@ -8,6 +14,8 @@ interface DocumentReviewNotificationPayload {
   reviewerName: string;
 }
 
+// Variables de entorno para configurar el cliente de Supabase y 
+// el servicio de envío de correos.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ??
@@ -20,6 +28,7 @@ const senderEmail =
   'notificaciones@appleseed.mx';
 const SAT_DONOR_REPORT_NAME = 'Reporte donador al SAT';
 
+//obtenemos un cliente de supabase
 function getAdminClient() {
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     throw new Error(
@@ -35,6 +44,9 @@ function getAdminClient() {
   });
 }
 
+//funcion para validar que el payload recibido en la solicitud POST 
+//cumple con los requisitos necesarios para enviar una notificación de revisión de documento, 
+//asegurando que se proporcionen todos los campos requeridos y que tengan el formato correcto.
 function isValidPayload(value: unknown): value is DocumentReviewNotificationPayload {
   if (!value || typeof value !== 'object') {
     return false;
@@ -54,6 +66,9 @@ function isValidPayload(value: unknown): value is DocumentReviewNotificationPayl
   );
 }
 
+//funcion para enviar un correo utilizando el servicio de Resend,
+//con un formato específico para notificar a la organización sobre el resultado de la revisión de su documento,
+//incluye el nombre del documento, el estado de la revisión y el nombre del revisor,
 async function sendEmailWithResend({
   recipient,
   organizationName,
@@ -112,6 +127,11 @@ async function sendEmailWithResend({
   }
 }
 
+//funcion para recalcular el nivel de riesgo de una organización,
+//basado en la aprobación o rechazo de su reporte de donador al SAT,
+//si el documento es rechazado o si hay documentos pendientes de aprobación, el riesgo se establece en alto,
+//si el documento es aprobado pero hay alertas AML de umbral 1 en los últimos 6 meses, el riesgo se establece en medio,
+//si el documento es aprobado y no hay alertas AML recientes, el riesgo se establece en bajo.
 async function recalculateOrganizationRisk(
   supabaseAdmin: ReturnType<typeof getAdminClient>,
   organizationId: string,
@@ -166,6 +186,10 @@ async function recalculateOrganizationRisk(
   }
 }
 
+//funcion para manejar las solicitudes POST a esta ruta,
+//que se encarga de enviar una notificación a la organización sobre el resultado de la revisión de su documento,
+//incluye la creación de un aviso en la base de datos y el envío de un correo electrónico,
+//si el documento aprobado es el reporte de donador al SAT, también se recalcula el nivel de riesgo de la organización.
 export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as unknown;

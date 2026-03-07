@@ -1,3 +1,8 @@
+// components/Documents.tsx
+// Este componente es el principal para gestionar los documentos requeridos por las organizaciones,
+// incluye funcionalidades para filtrar por estado, buscar por nombre, subir nuevos documentos,
+// revisar documentos existentes y visualizar detalles de cada documento.
+
 "use client"
 import { useEffect, useRef, useState } from 'react';
 import { FileText, Upload, CheckCircle, Clock, AlertTriangle, Calendar, Eye, Search, SlidersHorizontal } from 'lucide-react';

@@ -1,4 +1,8 @@
 // components/OrganizationModal.tsx
+// Este componente es un modal para mostrar los detalles de una organización en revisión,
+// incluye información de contacto, nivel de riesgo, fecha de registro y un visor de documentos,
+// también muestra el estado de verificación con un badge de color y permite cerrar el modal haciendo clic fuera o presionando Escape.
+
 'use client'
 
 import { useEffect } from 'react';

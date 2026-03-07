@@ -1,4 +1,8 @@
 // app/components/BankAccountForm.tsx
+// Este componente es un formulario para ingresar la información bancaria de una organización,
+// con campos para el nombre del banco, titular de la cuenta, número de cuenta y CLABE interbancaria,
+// incluye validaciones básicas de formato y muestra mensajes de error si los datos ingresados no son válidos.
+
 'use client'
 
 import { CreditCard } from 'lucide-react';
@@ -16,6 +20,9 @@ interface BankAccountFormProps {
   error?: string;
 }
 
+//componente para mostrar un formulario de información bancaria, 
+//con campos para el nombre del banco, titular de la cuenta, número de cuenta y CLABE interbancaria,
+//incluye validaciones básicas de formato y muestra mensajes de error si los datos ingresados no son válidos.
 export function BankAccountForm({ value, onChange, error }: BankAccountFormProps) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     onChange({

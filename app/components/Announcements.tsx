@@ -1,3 +1,9 @@
+// components/Announcements.tsx
+// Este componente es el principal para mostrar los avisos y comunicados, 
+// incluye filtros por categoría, prioridad, estado de lectura y búsqueda por texto,
+// además de la funcionalidad para marcar los avisos como leídos al seleccionarlos y 
+// mostrar los detalles del aviso seleccionado.
+
 "use client"
 import { useEffect, useMemo, useState } from 'react';
 import { Bell, AlertTriangle, Info, CheckCircle, Calendar, User, X, Search, SlidersHorizontal } from 'lucide-react';
@@ -35,6 +41,9 @@ const categoryStyles: Record<AnnouncementCategory, string> = {
   documento: 'bg-indigo-50 text-indigo-700 border-indigo-200',
 };
 
+//componente principal para mostrar los avisos y comunicados, incluye filtros por categoría, 
+//prioridad, estado de lectura y búsqueda por texto,
+//además de la funcionalidad para marcar los avisos como leídos al seleccionarlos y mostrar los detalles del aviso seleccionado.
 export function Announcements() {
   const location = useLocation();
   const navigate = useNavigate();

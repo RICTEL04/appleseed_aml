@@ -1,3 +1,8 @@
+// hooks/useAnnouncement.ts
+// Este hook personalizado se encarga de manejar la lógica relacionada con los avisos para el trabajador autenticado,
+// incluye la obtención del userId del trabajador, la carga de los avisos asociados a ese userId,
+// y funciones para actualizar, crear uno o varios avisos, todo esto utilizando el repositorio de avisos
+// y el cliente de Supabase para la autenticación y gestión de sesiones.
 import { useState, useEffect, useCallback } from 'react';
 import { announcementRepository } from '@/lib/repositories/announcement.repository';
 import { AnnouncementModel } from '@/lib/models/announcement.model';
@@ -10,7 +15,7 @@ export function useAnnouncement(){
     const [userId, setUserId] = useState<string | null>(null);
     const [announcements, setAnnouncements] = useState<AnnouncementModel[]>([]);
 
-    // Step 1: resolve userId once on mount
+    // paso 1: resolver el userId una vez al montar el hook
     useEffect(() => {
         const init = async () => {
         const client = getSupabaseClient();
@@ -28,7 +33,8 @@ export function useAnnouncement(){
         init();
     }, []);
 
-
+    // use effect para obtener todos los anuncios por usuario
+    // se activa automaticamente
     useEffect(() => {
         if (!userId) return;
         const run = async () => {
@@ -51,6 +57,7 @@ export function useAnnouncement(){
         run();
     }, [userId]);
 
+    //hook para obtener todos los anuncios por usuario
     const fetchAnnouncements = useCallback(async () => {
         if (!userId) return [];
         try {
@@ -70,6 +77,7 @@ export function useAnnouncement(){
         }
     }, [userId]);
 
+    //hook para actualizar un anuncio existente
     const updateAnnouncement = useCallback(async (announcement: AnnouncementModel) => {
         try {
             setLoading(true);
@@ -87,6 +95,9 @@ export function useAnnouncement(){
         }
     }, []);
 
+    // hook para crear un anuncio desde cero
+    // se puede usar para crear un anuncio individual o para crear 
+    // los anuncios iniciales al crear una organización
     const createAnnouncement = useCallback(async (announcement: AnnouncementModel) => {
         try {
             setLoading(true);
@@ -104,6 +115,9 @@ export function useAnnouncement(){
         }
     }, []);
 
+    // hook para crear muchos anuncios al mismo tiempo
+    // se puede usar para crear los anuncios iniciales al crear una organización
+    // o para crear varios anuncios de golpe desde admin
     const createManyAnnouncements = useCallback(async (announcements: AnnouncementModel[]) => {
         try {
             setLoading(true);

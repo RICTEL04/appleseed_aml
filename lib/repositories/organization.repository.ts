@@ -9,7 +9,8 @@ export class OrganizationRepository {
         return process.env.NEXT_PUBLIC_SUPABASE_ORG_TABLES || 'osc'
     }
 
-    //get all organizations
+    // funcion para obtener todas las organizaciones sin fines de lucro registradas en la base de datos, 
+    // ordenadas por fecha de creación de forma descendente
     async getAll(): Promise<OrganizationModel[]> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
@@ -24,6 +25,7 @@ export class OrganizationRepository {
         return (data || []).map((item: IOrganization) => new OrganizationModel(item))
     }
 
+    // funcion para obtener una organizacion mediante su ID
     async getById(id: string): Promise<OrganizationModel | null> {
         const supabase = getSupabaseClient()
         console.log(id, "is it good?")
@@ -39,7 +41,7 @@ export class OrganizationRepository {
         return data ? new OrganizationModel(data) : null
     }
 
-    // ✅ Fixed: added .eq('id_osc', organization.id_osc) so UPDATE has a WHERE clause
+    // funcion para actualizar una organizacion existente, recibe un objeto de tipo IOrganization 
     async update(organization: IOrganization): Promise<OrganizationModel> {
         const supabase = getSupabaseClient()
         const { id_osc, ...fields } = organization as any
@@ -56,6 +58,7 @@ export class OrganizationRepository {
         return new OrganizationModel(data)
     }
 
+    // funcion para obtener todas las organizaciones con sus direcciones en una tupla
     async getAllWithDirections(): Promise<[OrganizationModel, DirectionModel | null][]> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
@@ -79,6 +82,7 @@ export class OrganizationRepository {
         })
     }
 
+    // setear la direccion de una organizacion
     async setDirection(id_osc: string, id_direccion: string): Promise<OrganizationModel> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase

@@ -1,3 +1,7 @@
+// lib/models/document.model.ts
+// este modelo representa un documento que una organizacion le pide a un trabajador,
+// el documento tiene un estado, una fecha de vencimiento, y puede tener una nota o comentario
+
 export interface IDocument{
     id: string | undefined
     nombre_documento: string

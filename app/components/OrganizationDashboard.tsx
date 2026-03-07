@@ -1,3 +1,9 @@
+// components/OrganizationDashboard.tsx
+// Este componente es el dashboard principal para las organizaciones, muestra métricas 
+// clave como estado de verificación, riesgo, vencimientos próximos, cobertura de documentos 
+// y alertas AML, además de gráficos de tendencias, distribución de riesgos, estado de documentos 
+// y alertas por umbral, también incluye una sección de acciones inmediatas para dar seguimiento a 
+// los casos más urgentes y una tabla con los documentos próximos a vencer.
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';

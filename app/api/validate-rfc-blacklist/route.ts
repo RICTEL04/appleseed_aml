@@ -1,3 +1,7 @@
+// Archivo: app/api/validate-rfc-blacklist/route.ts
+//este archivo define una ruta API para validar si un RFC está incluido en la lista negra del SAT,que se utiliza para validar si un RFC está incluido en esa lista negra, lo cual es un requisito para continuar con el proceso de registro o donación,
+//incluye la descarga del archivo CSV desde Supabase Storage, el parseo del contenido y la construcción de un conjunto de RFCs para la validación,
+//devuelve una respuesta indicando si el RFC está en la lista negra o no, junto con información adicional sobre la fuente de datos y el total de RFCs cargados.
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -6,9 +10,12 @@ const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ??
   process.env.SUPABASE_SECRET_KEY;
 
+
 const SAT_BUCKET_NAME = 'listas-aml';
 const SAT_FILE_PATH = 'lista_negra_sat.csv';
-
+//obtenemos un cliente de supabase para acceder al archivo CSV de RFCs en la 
+// lista negra del SAT,que se utiliza para validar si un RFC está incluido en esa lista negra, 
+// lo cual es un requisito para continuar con el proceso de registro o donación.
 function getServiceClient() {
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     throw new Error(
@@ -38,6 +45,9 @@ function decodeCsvBuffer(arrayBuffer: ArrayBuffer) {
   return utf8Text;
 }
 
+//funcion para parsear el contenido de un archivo CSV,
+//que maneja correctamente campos entre comillas, comas dentro de campos y saltos de línea,
+//devuelve un array de filas, donde cada fila es un array de campos.
 function parseCsvRows(content: string) {
   const rows: string[][] = [];
   let currentRow: string[] = [];
@@ -93,6 +103,9 @@ function parseCsvRows(content: string) {
   return rows;
 }
 
+//funcion para construir un conjunto de RFCs a partir de las filas parseadas del archivo CSV,
+//valida que cada RFC cumpla con el formato esperado antes de agregarlo al conjunto,
+//esto permite realizar validaciones rápidas de inclusión de RFCs en la lista negra utilizando un Set.
 function buildRfcSet(rows: string[][]) {
   const rfcPattern = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/;
   const rfcSet = new Set<string>();
@@ -112,6 +125,10 @@ function buildRfcSet(rows: string[][]) {
   return rfcSet;
 }
 
+//funcion para manejar las solicitudes POST a esta ruta,
+//que se encarga de validar si el RFC proporcionado en el payload está incluido en la lista negra del SAT,
+//incluye la descarga del archivo CSV desde Supabase Storage, el parseo del contenido y la construcción de un conjunto de RFCs para la validación,
+//devuelve una respuesta indicando si el RFC está en la lista negra o no, junto con información adicional sobre la fuente de datos y el total de RFCs cargados.
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as { rfc?: string };

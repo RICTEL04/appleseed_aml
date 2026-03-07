@@ -1,3 +1,12 @@
+// components/Organizations.tsx
+// Este componente es la página principal de listado de organizaciones para los trabajadores,
+//  muestra un grid con tarjetas para cada organización,
+// cada tarjeta muestra información básica como nombre, tipo, contacto, email, ubicación, 
+// estado de verificación, nivel de riesgo y fecha de registro,
+// permite buscar por nombre o ubicación, filtrar por estado de verificación, y ordenar 
+// por nivel de riesgo y fecha de registro,
+// también incluye un botón para enviar avisos a cada organización y un modal para mostrar 
+// detalles adicionales al hacer clic en la tarjeta.
 "use client"
 
 import { useEffect, useState } from 'react';

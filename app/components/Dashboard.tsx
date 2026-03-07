@@ -1,3 +1,8 @@
+// components/Dashboard.tsx
+// Este componente es el dashboard principal para los trabajadores, muestra métricas 
+// clave como número de organizaciones registradas, alertas AML, cobertura de verificación y donaciones del mes,
+// además de gráficos de tendencias, distribución de riesgos, estado de documentos y alertas por umbral,
+// también incluye una sección de acciones inmediatas para dar seguimiento a los casos más urgentes y una tabla con las organizaciones más recientes.
 "use client"
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';

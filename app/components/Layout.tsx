@@ -1,3 +1,7 @@
+// components/Layout.tsx
+// Este componente es el layout principal de la aplicación, incluye un header con el logo y botón de menú, un sidebar con navegación a dashboard y organizaciones, y un main content area donde se renderizan las diferentes páginas a través de react-router Outlet,
+// también maneja la validación de sesión con Supabase, redirige a login si no hay sesión válida, y permite cerrar sesión desde el header.
+
 "use client"
 
 import { useEffect } from 'react';

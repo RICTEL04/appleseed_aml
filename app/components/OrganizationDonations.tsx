@@ -1,3 +1,8 @@
+// components/OrganizationDonations.tsx
+// Este componente es el perfil de donaciones para las organizaciones, muestra un link de donación personalizado para 
+// compartir, un historial detallado de donaciones recibidas con filtros de búsqueda y paginación, y una sección de donadores 
+// frecuentes con alertas AML basadas en umbrales de monto donado en los últimos 6 meses, también permite copiar el link de 
+// donación al portapapeles y muestra mensajes de confirmación.
 "use client"
 
 import { useState, useEffect, useMemo } from 'react';

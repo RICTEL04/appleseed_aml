@@ -1,6 +1,11 @@
+// Archivo: app/api/register-organization/route.ts
+// este archivo define una ruta API para registrar una nueva organización en el sistema, incluye la validación del payload recibido, la creación de un usuario en Supabase Auth, el registro de la dirección y la información de la organización en la base de datos,
+// si ocurre algún error durante el proceso, se devuelve una respuesta con el mensaje correspondiente y se realizan limpiezas de datos si es necesario.
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+// Definicion de tipos del payload esperado para registrar una organizacion,
+// incluyendo validaciones básicas de formato y campos requeridos.
 interface RegisterOrganizationPayload {
   name: string;
   type: string;
@@ -18,6 +23,8 @@ interface RegisterOrganizationPayload {
   fundingSource: string;
 }
 
+// Lista de campos requeridos para registrar una organizacion, 
+// utilizada para validar el payload recibido.
 const requiredFields: Array<keyof RegisterOrganizationPayload> = [
   'name',
   'type',
@@ -41,6 +48,7 @@ const supabaseServiceRoleKey =
 const appSchema = process.env.NEXT_PUBLIC_SUPABASE_APP_SCHEMA ?? 'public';
 const DEFAULT_ORGANIZATION_PASSWORD = 'AML123';
 
+//obtenemos un cliente de supabase
 function getAdminClient() {
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     throw new Error(
@@ -56,6 +64,8 @@ function getAdminClient() {
   });
 }
 
+//funcion para validar que el payload recibido en la solicitud
+//POST cumple con los requisitos necesarios para registrar una organizacion,
 function isValidPayload(value: unknown): value is RegisterOrganizationPayload {
   if (!value || typeof value !== 'object') {
     return false;
@@ -67,6 +77,9 @@ function isValidPayload(value: unknown): value is RegisterOrganizationPayload {
   });
 }
 
+//funcion que maneja las solicitudes POST para registrar una organizacion,
+//incluye la creación del usuario en Supabase Auth, la inserción de la dirección y la organización en las tablas correspondientes,
+//y la gestión de errores para asegurar que no queden datos inconsistentes en caso de fallos en alguna etapa del proceso.
 export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as unknown;

@@ -1,3 +1,8 @@
+// /hooks/useOrganizations.ts
+// Este hook personalizado se encarga de manejar la lógica relacionada con las organizaciones,
+// incluyendo la carga de la organización del trabajador autenticado, la carga de todas las 
+// organizaciones. También incluye funciones para actualizar la organización del trabajador autenticado y 
+// para obtener todas las organizaciones con sus direcciones, utilizando el repositorio de organizaciones
 import { useState, useEffect, useCallback } from 'react';
 import { organizationRepository } from '@/lib/repositories/organization.repository';
 import { OrganizationModel } from '@/lib/models/organization.model';
@@ -18,7 +23,7 @@ export function useOrganizations() {
     const [error, setError] = useState<string | null>(null);
     const [userId, setUserId] = useState<string | null>(null);
 
-    // Step 1: resolve userId once on mount
+    // paso 1: resolver el userId una vez al montar el hook
     useEffect(() => {
         const init = async () => {
         const client = getSupabaseClient();
@@ -36,7 +41,8 @@ export function useOrganizations() {
         init();
     }, []);
 
-    // Step 2: fetch all organizations (no auth needed)
+    // paso 2: obtener todas las organizaciones una vez montado el hook, 
+    // para cargar la lista de organizaciones en admin
     useEffect(() => {
         const run = async () => {
         try {
@@ -54,7 +60,8 @@ export function useOrganizations() {
         run();
     }, []);
 
-    // Step 3: fetch current user's organization once userId is ready
+    // paso 3: una vez que el userId está resuelto, 
+    // cargar la organización asociada a ese userId
     useEffect(() => {
         if (!userId) return;
         const run = async () => {
@@ -74,6 +81,9 @@ export function useOrganizations() {
         run();
     }, [userId]);
 
+    // hook para obtener todas las organizaciones con sus direcciones
+    // se puede usar tanto para cargar la organización del perfil como 
+    // para cargar la lista de organizaciones en admin
     const allOrganizationsWithDirections = useCallback(async (): Promise<[OrganizationModel, DirectionModel | null][]> => {
         try {
             setLoadingAll(true);   
@@ -88,7 +98,10 @@ export function useOrganizations() {
             setLoadingAll(false);
         }
     }, []);
-
+    
+    // hook para actualizar la organización del trabajador autenticado
+    // se puede usar para actualizar la organización del perfil del trabajador 
+    // autenticado
     const updateOrganization = useCallback(async (org: OrganizationModel) => {
         try {
         setLoading(true);
@@ -102,6 +115,9 @@ export function useOrganizations() {
         }
     }, []);
 
+    // hook para asignar una dirección a la organización del trabajador autenticado
+    // se puede usar para asignar la dirección creada o actualizada al perfil de la 
+    // organización del trabajador autenticado
     const setDirectionById = useCallback(async (id_direccion: string) => {
         if (!userId) return null;
         try {

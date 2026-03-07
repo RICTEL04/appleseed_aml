@@ -1,3 +1,11 @@
+// components/OrganizationProfile.tsx
+// Este componente es el perfil de organización donde se muestra la información general de la organización,
+// incluyendo su nombre, RFC, teléfono, correo electrónico, dirección fiscal y descripción, además de un 
+// formulario para actualizar la dirección y la información bancaria,
+// con validaciones para cada campo, manejo de errores y un proceso de guardado que actualiza la información 
+// en la base de datos a través de los hooks personalizados,
+// también muestra un link de donación personalizado una vez que la información está completa, y permite 
+// copiarlo al portapapeles.
 "use client"
 
 import { useState, useEffect, useRef } from 'react';

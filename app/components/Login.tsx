@@ -1,3 +1,10 @@
+// components/Login.tsx
+// Este componente es el formulario de login para la aplicación, permite a los usuarios ingresar su correo electrónico 
+// y contraseña para autenticarse, maneja la autenticación con Supabase, valida la sesión y redirige a la página correspondiente 
+// según el tipo de usuario (administrador u organización),
+// también incluye una opción para recuperar contraseña que envía un correo de restablecimiento a través de Supabase, y muestra 
+// mensajes de error si las credenciales son incorrectas o si hay problemas de conexión.
+
 "use client"
 
 import { useEffect, useState } from 'react';

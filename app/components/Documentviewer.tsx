@@ -1,4 +1,8 @@
 // components/DocumentViewer.tsx
+// Este componente es el visor principal para revisar los documentos enviados por las organizaciones,
+// muestra una lista de documentos con pestañas, permite abrir cada documento en un iframe, 
+// y tiene un formulario para que el trabajador deje una nota, comentario y estado de revisión (aprobado/rechazado),
+// además de enviar una notificación a la organización cuando se guarda la revisión.
 'use client'
 
 import { useEffect, useState, useCallback } from 'react';

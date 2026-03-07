@@ -1,3 +1,8 @@
+// hooks/useBankAccount.ts
+// Este hook personalizado se encarga de manejar la lógica relacionada con la cuenta bancaria del trabajador autenticado,
+// incluye la obtención del userId del trabajador, la carga de la cuenta bancaria asociada a ese userId,
+// y una función para actualizar o crear la cuenta bancaria, todo esto utilizando el repositorio de cuentas bancarias
+// y el cliente de Supabase para la autenticación y gestión de sesiones.
 import { useState, useEffect, useCallback } from 'react';
 import { bankAccountRepository } from '@/lib/repositories/bank_account.repository';
 import { BankAccountModel } from '@/lib/models/bank-account.model';
@@ -9,7 +14,7 @@ export function useBankAccount() {
   const [error, setError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // Step 1: resolve userId once on mount
+  // paso 1: resolver el userId una vez al montar el hook
   useEffect(() => {
     const init = async () => {
       const client = getSupabaseClient();
@@ -26,7 +31,8 @@ export function useBankAccount() {
     init();
   }, []);
 
-  // Step 2: fetch bank account once userId is ready
+  // paso 2: una vez que el userId está resuelto, 
+  // cargar la cuenta bancaria asociada a ese userId
   useEffect(() => {
     if (!userId) return;
     const run = async () => {
@@ -47,6 +53,8 @@ export function useBankAccount() {
     run();
   }, [userId]);
 
+  // hook para hacer upsert(create y update) de una cuenta de banco
+  // si el usuario ya tiene una cuenta, se actualiza, si no, se crea una nueva
   const upsertBankAccount = useCallback(async (account: BankAccountModel) => {
     try {
       setLoading(true);

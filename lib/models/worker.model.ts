@@ -1,4 +1,6 @@
 // lib/models/worker.model.ts
+// este modelo representa un trabajador, que es una persona que trabaja para una appleseed
+
 import { WorkerRole } from './types'
 
 export interface IWorker {

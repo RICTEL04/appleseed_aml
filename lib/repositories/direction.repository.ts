@@ -1,9 +1,13 @@
+// lib/repositories/direction.repository.ts
+// funcion para manejar la logica de acceso a datos para las direcciones 
+
 import {getSupabaseClient} from '../../lib/supabase'
 
 import { DirectionModel, IDirection } from '../models/direction.model'
 
 export class DirectionRepository {
 
+    // funcion para obtener la direccon mediante el ID
     async getById(id: string): Promise<DirectionModel | null> {
         const supabase = getSupabaseClient()
     
@@ -19,6 +23,7 @@ export class DirectionRepository {
         return data ? new DirectionModel(data) : null
     }
 
+    // funcion para actualizar e insertar la direccion 
     async upsert(direction: IDirection): Promise<DirectionModel> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase

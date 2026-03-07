@@ -1,4 +1,5 @@
 // lib/models/bank-account.model.ts
+// este modelo representa la cuenta bancaria de una organizacion
 export interface IBankAccount {
   id_cuenta_banco: string | undefined
   clabe: string

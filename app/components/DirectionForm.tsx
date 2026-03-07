@@ -1,3 +1,7 @@
+// components/DirectionForm.tsx
+// Este componente es un formulario para ingresar la información de dirección fiscal de una organización,
+// con campos para calle, número exterior, número interior, código postal, ciudad/alcaldía y entidad federativa,
+// incluye validaciones básicas de formato y muestra mensajes de error si los datos ingresados no son válidos.
 'use client'
 
 import { useState } from 'react';

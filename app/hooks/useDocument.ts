@@ -1,3 +1,8 @@
+// hooks/useDocument.ts
+// Este hook es usado para la obtencion y manejo de documentos, incluyendo la carga de documentos por organización,
+// la creación de nuevos documentos, la actualización de documentos existentes y la obtención de documentos con URLs firmadas,
+// utilizando el repositorio de documentos para interactuar con la base de datos y manejar estados de carga y error.
+
 import { useState, useEffect, useCallback } from 'react';
 import { documentRepository } from '@/lib/repositories/document.repository';
 import { DocumentModel, IDocument } from '@/lib/models/document.model';
@@ -7,6 +12,9 @@ export function useDocument(){
     const [error, setError] = useState<string | null>(null);
     const [documents, setDocuments] = useState<DocumentModel[]>([]);
 
+    // hook para obtener documentos por organización
+    // se activa automaticamente al cargar el perfil de la organización
+    // se puede usar para cargar los documentos de la organización en el perfil de la organización
     const fetchDocuments = useCallback(async (orgId: string) => {
         try {
             setLoading(true);
@@ -25,6 +33,8 @@ export function useDocument(){
         }
     }, []); 
 
+    // hook para crear un nuevo documento de registro
+    // se puede usar para crear un documento individualmente
     const createRegisterDocument = useCallback(async (document: IDocument) => {
         try {
             setLoading(true);
@@ -42,6 +52,10 @@ export function useDocument(){
         }
     }, []);
 
+    // hook para obtener todos los documentos con URLs firmadas por organización
+    // hook para obtener todos los documentos con URLs firmadas por organización, 
+    // se puede usar para cargar los documentos de la organización en el perfil de 
+    // la organización, pero con las URLs firmadas para poder visualizarlos o descargarlos directamente desde el frontend
     const fetchAllDocumentsByOrg = useCallback(async (id: string) => {
         try {
             setLoading(true);
@@ -61,6 +75,8 @@ export function useDocument(){
         }
     }, []);
 
+    // hook para actualizar un documento existente
+    // se puede usar para actualizar un documento individualmente
     const updateDocument = useCallback(async (document: DocumentModel) => {
         try {
             setLoading(true);

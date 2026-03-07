@@ -1,8 +1,13 @@
+// lib/repositories/document.repository.ts
+// esta clase se encarga de manejar la logica de acceso a datos para los documentos,
+// permite obtener, crear, y actualizar documentos en la base de datos utilizando Supabase
+
 import { getSupabaseClient } from "../supabase";
 import {IDocument, DocumentModel} from "../models/document.model";
 
 export class DocumentRepository{
 
+    // funcion para obtener todos los documentos de una organizacion junto con sus URLs firmadas
     async getAllWithSignedUrlsByOrg(id_osc: string): Promise<[DocumentModel[], (string|null)[]]> {
         const documents = await this.getAllByOrg(id_osc);
         console.log('Documents fetched for orgId', id_osc, ':', documents);
@@ -14,6 +19,7 @@ export class DocumentRepository{
         return [documents, urls];
     }
 
+    // funcion para obtener todos los documentos de una organizacion, recibe el id de la organizacion como parametro
     async getAllByOrg(id : string): Promise<DocumentModel[]> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
@@ -29,6 +35,7 @@ export class DocumentRepository{
         return data as DocumentModel[];
     }
 
+    // funcion para obtener la URL firmada de un documento mediante su ID, recibe el id del documento como parametro
     async  getDocumentById(id: string): Promise<any> {
         if (!id) return null;
         const supabase = getSupabaseClient()
@@ -43,6 +50,8 @@ export class DocumentRepository{
         return data ? data.signedUrl : null
     }
 
+    // funcion para crear registro de un documento en la base de datos, 
+    // recibe un objeto de tipo IDocument con los datos del nuevo documento
     async createDocumentRegister(document: IDocument): Promise<DocumentModel> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
@@ -57,6 +66,7 @@ export class DocumentRepository{
         return data as DocumentModel;
     }
 
+    // funcion para actualizar el documento
     async updateDocument(document: IDocument): Promise<DocumentModel>{
         const supabase = getSupabaseClient()
         const { id, ...fields } = document as any

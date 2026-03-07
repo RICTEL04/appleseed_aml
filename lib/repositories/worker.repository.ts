@@ -1,8 +1,12 @@
+// lib/repositories/worker.repository.ts
+// esta clase se encarga de manejar la logica de acceso a datos para los trabajadores,
+
 import {getSupabaseClient} from '../supabase'
 import { IWorker, WorkerModel} from '../models/worker.model'
 
 export class WorkerRepository{
 
+    //funcion para obtener la informacion de un trabajador mediante su ID
     async getById(id: string): Promise<WorkerModel | null> {
         
         const supabase = getSupabaseClient()

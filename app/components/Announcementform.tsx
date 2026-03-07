@@ -1,4 +1,7 @@
 // components/AnnouncementForm.tsx
+// Este componente es un formulario para crear y enviar avisos a una o varias organizaciones, 
+// con campos para título, mensaje, categoría, urgencia y datos adicionales si la categoría es 
+// "documento". Incluye validaciones de formulario, manejo de estados de envío y muestra mensajes de éxito o error según corresponda.
 'use client'
 
 import { useState } from 'react';
@@ -38,6 +41,8 @@ const EMPTY_DOC = {
   vencimiento:      '',
 };
 
+//funcion para pedir al usuario que ingrese los datos necesarios para crear un aviso, incluyendo validaciones de campos requeridos,
+//manejo de estados de envío y muestra mensajes de éxito o error según corresponda.
 export function AnnouncementForm({
   targetOrgIds,
   allowedCategorias,

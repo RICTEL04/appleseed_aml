@@ -1,6 +1,12 @@
+// Archivo: app/api/register-donor/route.ts
+// este archivo define una ruta API para registrar un nuevo donante en el sistema,incluye la validación del payload recibido, la creación de un usuario en Supabase Auth, el registro de la dirección y la información del donante en la base de datos,
+// si ocurre algún error durante el proceso, se devuelve una respuesta con el mensaje correspondiente y se realizan limpiezas de datos si es necesario.
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+// Definicion de tipos del payload esperado para registrar un donante, 
+// incluyendo validaciones básicas de formato y campos requeridos.
 interface DonorPayload {
   nombre: string;
   rfc: string;
@@ -12,6 +18,8 @@ interface DonorPayload {
   person_type?: 'fisica' | 'moral';
 }
 
+// Definicion de tipos del payload esperado para la direccion del donante,
+// incluyendo validaciones básicas de formato y campos requeridos.
 interface AddressPayload {
   calle: string;
   num_exterior: string;
@@ -21,11 +29,14 @@ interface AddressPayload {
   ciudad_alcaldia: string;
 }
 
+// Definicion del payload completo esperado para registrar un donante, 
+// que incluye la informacion del donante, la direccion y la contraseña.
 interface RegisterDonorPayload {
   donor: DonorPayload;
   address: AddressPayload;
   password: string;
 }
+
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey =
@@ -33,6 +44,7 @@ const supabaseServiceRoleKey =
   process.env.SUPABASE_SECRET_KEY;
 const appSchema = process.env.NEXT_PUBLIC_SUPABASE_APP_SCHEMA ?? 'public';
 
+//obtenemos un cliente de supabase 
 function getAdminClient() {
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     throw new Error(
@@ -48,6 +60,8 @@ function getAdminClient() {
   });
 }
 
+//funcion para validar que el payload recibido en la solicitud 
+//POST cumple con los requisitos necesarios para registrar un donante,
 function isValidPayload(value: unknown): value is RegisterDonorPayload {
   if (!value || typeof value !== 'object') {
     return false;
@@ -93,6 +107,8 @@ function isValidPayload(value: unknown): value is RegisterDonorPayload {
   return hasRequiredPhysicalFields && hasValidAddressFields && payload.password.trim().length >= 8;
 }
 
+//funcion para manejar las solicitudes POST a esta ruta, 
+//que se encarga de registrar un nuevo donante en el sistema,
 export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as unknown;

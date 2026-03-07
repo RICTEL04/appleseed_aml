@@ -1,4 +1,6 @@
 // lib/models/donor.model.ts
+// este modelo representa un donante, que es una persona que hace donaciones a las organizaciones
+
 export interface IDonor {
   id_donante: string
   nombre_varchar: string

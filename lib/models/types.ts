@@ -1,4 +1,5 @@
 // lib/models/types.ts
+// tipos generales que se usan en varios modelos
 export type UrgencyLevel = 'baja' | 'media' | 'alta' | 'urgente'
 export type OrganizationType = 'asociacion' | 'fundacion' | 'institucion' | 'otro'
 export type WorkerRole = 'admin' | 'gestor' | 'contador' | 'visualizador'

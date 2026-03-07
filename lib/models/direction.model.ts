@@ -1,3 +1,7 @@
+// lib/models/direction.model.ts
+// este modelo representa la direccion de una organizacion o de un usuario, 
+// del contexto en el que se use.
+
 export interface IDirection {
   id_direccion: undefined | string
   calle: string

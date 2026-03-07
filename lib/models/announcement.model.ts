@@ -1,4 +1,5 @@
-// lib/models/announcement.model.ts
+// lib/models/announcement.model.
+// Este model representa un aviso que puede ser mandado a una organizacion
 import { UrgencyLevel, AvisoStatus } from './types'
 import { OrganizationModel } from './organization.model'
 

@@ -1,4 +1,7 @@
 // lib/models/organization.model.ts
+// organizaciones sin fines de lucro que pueden recibir donaciones, 
+// avisos, y tener trabajadores asociados.
+
 import { OrganizationType } from './types'
 
 export interface IOrganization {

@@ -1,4 +1,9 @@
 // components/SingleAnnouncementModal.tsx
+// Este componente es un modal para enviar un aviso a una organización específica,
+// muestra el nombre de la organización a la que se enviará el aviso, incluye un formulario 
+// para ingresar el título, mensaje, categoría y urgencia del aviso,
+// y maneja el envío del aviso a través del componente AnnouncementForm, además de permitir 
+// cerrar el modal al hacer clic fuera o presionar la tecla Escape.
 'use client'
 
 import { useEffect } from 'react';

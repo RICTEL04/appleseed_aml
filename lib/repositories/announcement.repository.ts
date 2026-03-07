@@ -1,8 +1,13 @@
+// lib/repositories/announcement.repository.ts
+// esta clase se encarga de manejar la logica de acceso a datos para los avisos,
+// permite obtener, crear, y actualizar avisos en la base de datos utilizando Supabase
+
 import {getSupabaseClient} from '../../lib/supabase'
 import { IAnnouncement, AnnouncementModel } from '../models/announcement.model'
 
 export class AnnouncementRepository{
 
+    // funcion para obtener todos los avisos de una organizacion, recibe el id de la organizacion como parametro,
     async getAll(id : string): Promise<AnnouncementModel[]> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
@@ -16,6 +21,7 @@ export class AnnouncementRepository{
         return data as AnnouncementModel[];
     }
 
+    //funcion para actualizar un aviso existente, recibe un objeto de tipo IAnnouncement con los campos a actualizar,
     async update(announcement: IAnnouncement): Promise<AnnouncementModel> {
         const supabase = getSupabaseClient()
         const { id_aviso, ...fields } = announcement as any
@@ -32,6 +38,7 @@ export class AnnouncementRepository{
         return new AnnouncementModel(data)
     }
 
+    //funcion para crear un nuevo aviso, recibe un objeto de tipo IAnnouncement con los datos del nuevo aviso
     async create(announcement: IAnnouncement): Promise<AnnouncementModel> {
         const supabase = getSupabaseClient()
         const { data, error } = await supabase
@@ -47,6 +54,7 @@ export class AnnouncementRepository{
         return new AnnouncementModel(data)
     }
 
+    //funcion para crear multiples avisos, 
     async createMany(announcements: IAnnouncement[]): Promise<AnnouncementModel[]> {
         const supabase = getSupabaseClient();
         const results: AnnouncementModel[] = [];

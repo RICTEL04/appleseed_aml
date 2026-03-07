@@ -1,3 +1,9 @@
+// components/OrganizationNotificationPanel.tsx
+// Este componente es el panel de notificaciones para las organizaciones, 
+// muestra una lista de avisos, donaciones y documentos relacionados con la organización,
+// permite filtrar por tipo de notificación, marcar como leídas, y navegar a los detalles 
+// de cada aviso o documento, también muestra un contador de notificaciones no leídas y 
+// permite marcar todas como leídas con un botón.
 import { useEffect, useState } from 'react';
 import { Bell, X, FileText, DollarSign, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router';

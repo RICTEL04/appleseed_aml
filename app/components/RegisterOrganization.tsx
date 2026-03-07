@@ -1,3 +1,7 @@
+// components/OrganizationRegister.tsx
+// Este componente es el formulario de registro para nuevas organizaciones, permite ingresar 
+// información básica como nombre, razón social, RFC, tipo de organización, representante legal, contacto y descripción,
+// así como establecer una contraseña y confirmarla antes de enviar el formulario.
 "use client"
 
 import { useState } from 'react';

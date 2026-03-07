@@ -1,3 +1,12 @@
+// components/SetPassword.tsx
+// Este componente es la página para establecer una nueva contraseña después de recibir 
+// un enlace de invitación, recuperación o magic link de Supabase,
+// valida el enlace recibido, permite ingresar y confirmar la nueva contraseña, 
+// y actualiza la contraseña del usuario en Supabase Auth,
+// también maneja errores comunes como enlaces inválidos o expirados, contraseñas que 
+// no coinciden o que no cumplen con los requisitos de seguridad,
+// y muestra mensajes de éxito o error según corresponda, redirigiendo al usuario al login 
+// después de actualizar la contraseña exitosamente.
 "use client"
 
 import { useEffect, useMemo, useState } from 'react';

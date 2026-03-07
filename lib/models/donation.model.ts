@@ -1,4 +1,6 @@
 // lib/models/donation.model.ts
+// este modelo representa una donacion que un donante hace a una organizacion,
+
 import { DonorModel } from './donor.model'
 import { BankAccountModel } from './bank-account.model'
 

@@ -1,3 +1,8 @@
+// hooks/useDirections.ts
+// Este hook personalizado se encarga de manejar la lógica relacionada con las direcciones, 
+// incluyendo la carga de una dirección por su ID y la función para actualizar o crear una dirección, 
+// utilizando el repositorio de direcciones para interactuar con la base de datos y manejar estados de carga y error.
+
 import { useState, useCallback } from 'react';
 import { directionRepository } from '@/lib/repositories/direction.repository';
 import { DirectionModel } from '@/lib/models/direction.model';
@@ -6,6 +11,9 @@ export function useDirections() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // hook para obtener una dirección por su ID
+  // se puede usar tanto para cargar la dirección de la organización en el perfil 
+  // como para cargar la dirección de un usuario en su perfil
   const fetchDirectionById = useCallback(async (id: string | undefined) => {
     if (!id) return null;
     try {
@@ -23,6 +31,9 @@ export function useDirections() {
     }
   }, []);
 
+  // hook para actualizar o crear una dirección
+  // si el objeto dirección tiene un id, se actualiza, si no, se crea una nueva 
+  // dirección
   const upsertDirection = useCallback(async (direction: DirectionModel) => {
     try {
       setLoading(true);
