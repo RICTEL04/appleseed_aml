@@ -138,6 +138,8 @@ Proceso en `POST /api/register-donor`:
 	- Registra aviso a OSC + envío de correo + recalcula riesgo en casos específicos.
 - `POST /api/validate-rfc-blacklist`
 	- Valida RFC contra CSV en Supabase Storage (`listas-aml/lista_negra_sat.csv`).
+- `POST /api/organization-chat`
+	- Chatbot para organizaciones con orientacion sobre cumplimiento AML y uso del portal.
 
 ### Ejemplos de payload
 
@@ -258,6 +260,10 @@ NEXT_PUBLIC_AUTH_SET_PASSWORD_PATH=/auth/set-password
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 # Validación RFC (opcional endpoint externo)
+
+# Chatbot AML (opcional)
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
 NEXT_PUBLIC_RFC_VALIDATION_URL=
 
 # Correos (Resend)

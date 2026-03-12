@@ -1,10 +1,3 @@
-// components/OrganizationLayout.tsx
-// Este componente es el layout principal para las organizaciones, incluye un header con el logo y 
-// botón de menú, un sidebar con navegación a dashboard, donaciones, avisos, documentos y perfil, y 
-// un main content area donde se renderizan las diferentes páginas a través de react-router Outlet,
-// también maneja la validación de sesión con Supabase, redirige a login si no hay sesión válida, 
-// y permite cerrar sesión desde el header.
-
 "use client"
 
 import { useEffect, useState } from 'react';
@@ -13,6 +6,7 @@ import { LayoutDashboard, Bell, FileText, LogOut, Menu, User, CircleDollarSign} 
 import Image from 'next/image';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 import { OrganizationNotificationPanel } from './OrganizationNotificationPanel';
+import { OrganizationLegalAssistant } from './OrganizationLegalAssistant';
 
 export function OrganizationLayout() {
   const navigate = useNavigate();
@@ -329,6 +323,8 @@ export function OrganizationLayout() {
           <Outlet />
         </main>
       </div>
+
+      <OrganizationLegalAssistant />
     </div>
   );
 }
