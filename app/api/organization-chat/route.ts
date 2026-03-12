@@ -1,12 +1,36 @@
+/**
+ * @file organization-chat/route.ts
+ * @description Next.js Route Handler para el chatbot AML del portal de organizaciones.
+ *
+ * Acepta peticiones POST con el mensaje del usuario y el historial de conversacion,
+ * reenvía la solicitud a la API de OpenAI Responses y devuelve la respuesta generada.
+ *
+ * Si `OPENAI_API_KEY` no está configurada, devuelve respuestas locales de fallback
+ * basadas en patrones de palabras clave (documentos, avisos, donaciones).
+ *
+ * Variables de entorno requeridas:
+ * - `OPENAI_API_KEY`  — Clave de API de OpenAI.
+ * - `OPENAI_MODEL`   — Modelo a usar (por defecto `gpt-4o-mini`).
+ */
+
 import { NextResponse } from 'next/server';
 
+/** Roles válidos en la conversación del chatbot. */
 type ChatRole = 'user' | 'assistant';
 
+/** Un mensaje individual dentro del historial de conversación. */
 interface ChatMessage {
   role: ChatRole;
   content: string;
 }
 
+/**
+ * Payload esperado en el cuerpo de la petición POST.
+ *
+ * @property message          - Mensaje actual del usuario (requerido).
+ * @property history          - Historial previo de la conversación (opcional, máx. últimos 12).
+ * @property organizationName - Nombre de la organización activa, usado para personalizar el prompt.
+ */
 interface ChatPayload {
   message: string;
   history?: ChatMessage[];
@@ -15,8 +39,13 @@ interface ChatPayload {
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
+/** Cantidad máxima de mensajes del historial que se envían al modelo para limitar tokens. */
 const MAX_HISTORY_MESSAGES = 12;
 
+/**
+ * Valida que el body recibido sea un `ChatPayload` mínimo válido.
+ * Solo se exige que `message` sea un string no vacío; el resto de campos son opcionales.
+ */
 function isValidChatPayload(value: unknown): value is ChatPayload {
   if (!value || typeof value !== 'object') return false;
 
@@ -25,6 +54,12 @@ function isValidChatPayload(value: unknown): value is ChatPayload {
   return typeof payload.message === 'string' && payload.message.trim().length > 0;
 }
 
+/**
+ * Limpia y recorta el historial de conversación antes de enviarlo al modelo.
+ * - Descarta entradas con roles o contenido inválidos.
+ * - Elimina espacios en blanco sobrantes de cada mensaje.
+ * - Conserva únicamente los últimos `MAX_HISTORY_MESSAGES` turnos.
+ */
 function sanitizeHistory(history: ChatMessage[] | undefined): ChatMessage[] {
   if (!Array.isArray(history)) return [];
 
@@ -38,6 +73,16 @@ function sanitizeHistory(history: ChatMessage[] | undefined): ChatMessage[] {
     .slice(-MAX_HISTORY_MESSAGES);
 }
 
+/**
+ * Construye el prompt de sistema que define el rol y las reglas de comportamiento
+ * del asistente AML.
+ *
+ * Restricciones clave incluidas en el prompt:
+ * - Responde solo en español y con orientación general, no asesoría legal personalizada.
+ * - Rechaza solicitudes para evadir controles AML/KYC o actividades ilícitas.
+ * - No inventa leyes ni artículos; remite al equipo legal cuando no tiene certeza.
+ * - Incluye descargo legal en respuestas con contenido jurídico.
+ */
 function buildSystemPrompt(organizationName: string | undefined) {
   const safeOrganizationName = organizationName?.trim() || 'la organización';
 
@@ -56,10 +101,19 @@ function buildSystemPrompt(organizationName: string | undefined) {
   ].join('\n');
 }
 
+/**
+ * Heurística simple para detectar si el mensaje tiene contenido de naturaleza legal
+ * y por tanto debe incluir el descargo de orientación no vinculante.
+ */
 function isLikelyLegalQuestion(message: string) {
   return /(ley|legal|regulacion|regulación|sat|lavado|dinero|norma|normativa|penal|delito|juridic|jurídic)/i.test(message);
 }
 
+/**
+ * Genera una respuesta local cuando `OPENAI_API_KEY` no está disponible.
+ * Usa patrones de palabras clave en el mensaje para devolver guías accionables
+ * sobre los módulos del portal: documentos, avisos y donaciones.
+ */
 function buildFallbackReply(message: string) {
   const legalDisclaimer = isLikelyLegalQuestion(message)
     ? '\n\nEsta respuesta es orientativa y no sustituye asesoria legal profesional.'
@@ -80,6 +134,11 @@ function buildFallbackReply(message: string) {
   return `Puedo orientarte sobre procesos del portal AML: documentos, avisos, perfil y donaciones.\n\nSi me compartes tu duda concreta, te doy pasos puntuales para resolverla dentro de la plataforma.${legalDisclaimer}`;
 }
 
+/**
+ * Extrae el texto de la respuesta del modelo desde la estructura de la API de OpenAI Responses.
+ * Intenta primero `output_text` (campo de conveniencia) y, si no existe,
+ * recorre `output[].content[]` buscando una parte de tipo `output_text`.
+ */
 function extractModelText(responseBody: unknown) {
   if (!responseBody || typeof responseBody !== 'object') return '';
 
@@ -107,6 +166,20 @@ function extractModelText(responseBody: unknown) {
 
 export const runtime = 'nodejs';
 
+/**
+ * POST /api/organization-chat
+ *
+ * Recibe el mensaje del usuario y el historial de conversación, llama a OpenAI
+ * y devuelve la respuesta del asistente AML.
+ *
+ * @body `{ message: string, history?: ChatMessage[], organizationName?: string }`
+ *
+ * Respuestas:
+ * - `200` `{ reply: string, source: 'llm' | 'fallback' }` — Respuesta generada correctamente.
+ * - `400` `{ message: string }` — Payload inválido.
+ * - `502` `{ message: string }` — Fallo en la llamada a OpenAI.
+ * - `500` `{ message: string }` — Error inesperado del servidor.
+ */
 export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as unknown;

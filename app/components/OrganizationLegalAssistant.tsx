@@ -1,21 +1,47 @@
+/**
+ * @file OrganizationLegalAssistant.tsx
+ * @description Widget flotante de chatbot AML para el portal de organizaciones.
+ *
+ * Renderiza un botón fijo en la esquina inferior derecha de la pantalla que,
+ * al activarse, despliega una ventana de conversación con el asistente virtual.
+ * Las consultas se envían a `POST /api/organization-chat` y el historial se
+ * mantiene en estado local durante la sesión activa.
+ *
+ * Se monta en `OrganizationLayout` para que esté disponible en todas las rutas
+ * del portal de organizaciones (`/organization/*`).
+ */
+
 "use client";
 
 import { FormEvent, useMemo, useState } from 'react';
 import { Bot, Loader2, MessageCircle, Send, X } from 'lucide-react';
 
+/** Roles válidos en la conversación del chatbot (espejo del tipo del API). */
 type ChatRole = 'user' | 'assistant';
 
+/** Representa un turno individual dentro del historial de conversación. */
 interface ChatMessage {
   role: ChatRole;
   content: string;
 }
 
+/** Mensaje de bienvenida mostrado al abrir el chat por primera vez. */
 const INITIAL_MESSAGE: ChatMessage = {
   role: 'assistant',
   content:
     'Hola. Soy tu asistente AML de Appleseed Mexico. Te puedo orientar sobre documentos, donaciones, avisos y procedimientos del portal.',
 };
 
+/**
+ * Widget de chatbot flotante para el asistente AML de Appleseed Mexico.
+ *
+ * Comportamiento:
+ * - Botón flotante siempre visible en la esquina inferior derecha.
+ * - Al hacer clic se despliega/oculta la ventana de conversación.
+ * - Envía el mensaje y los últimos 10 turnos de historial al endpoint de chat.
+ * - Muestra indicador de carga y errores en línea.
+ * - El nombre de la organización se lee de `localStorage` para personalizar el prompt.
+ */
 export function OrganizationLegalAssistant() {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
@@ -23,11 +49,17 @@ export function OrganizationLegalAssistant() {
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  /** Nombre de la organización activa leído de localStorage para personalizar el prompt del modelo. */
   const organizationName = useMemo(() => {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem('organization_name') ?? '';
   }, []);
 
+  /**
+   * Maneja el envío del formulario de chat.
+   * Agrega el mensaje del usuario al historial local, llama al endpoint
+   * y agrega la respuesta del asistente al estado al recibir la respuesta.
+   */
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
