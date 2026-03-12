@@ -6,6 +6,7 @@ import { LayoutDashboard, Bell, FileText, LogOut, Menu, User, CircleDollarSign} 
 import Image from 'next/image';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 import { OrganizationNotificationPanel } from './OrganizationNotificationPanel';
+import { OrganizationLegalAssistant } from './OrganizationLegalAssistant';
 
 export function OrganizationLayout() {
   const navigate = useNavigate();
@@ -322,6 +323,8 @@ export function OrganizationLayout() {
           <Outlet />
         </main>
       </div>
+
+      <OrganizationLegalAssistant />
     </div>
   );
 }
