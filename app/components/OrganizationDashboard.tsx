@@ -11,6 +11,7 @@ import { CheckCircle2, Clock, AlertTriangle, FileText, Bell, ShieldAlert } from 
 import { Link } from 'react-router';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
+import mexicoMap from '@svg-maps/mexico';
 
 type DocumentStatus = 'approved' | 'pending' | 'overdue' | 'in_review' | 'rejected';
 
@@ -33,8 +34,30 @@ interface DashboardAlert {
 
 interface DashboardDonation {
   id_donacion: string;
+  id_donante: string | null;
   created_at: string;
   cantidad: number | null;
+}
+
+interface DashboardDonor {
+  id_donante: string;
+  id_direccion: string | null;
+}
+
+interface DashboardDirection {
+  id_direccion: string;
+  entidad_federativa: string | null;
+}
+
+interface MexicoMapLocation {
+  id: string;
+  name: string;
+  path: string;
+}
+
+interface MexicoMapData {
+  viewBox: string;
+  locations: MexicoMapLocation[];
 }
 
 interface OscProfile {
@@ -79,6 +102,70 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 2,
   });
 
+const STATE_ALIASES: Record<string, string> = {
+  'aguascalientes': 'Aguascalientes',
+  'baja california': 'Baja California',
+  'baja california sur': 'Baja California Sur',
+  'campeche': 'Campeche',
+  'coahuila': 'Coahuila',
+  'coahuila de zaragoza': 'Coahuila',
+  'colima': 'Colima',
+  'chiapas': 'Chiapas',
+  'chihuahua': 'Chihuahua',
+  'ciudad de mexico': 'Ciudad de Mexico',
+  'distrito federal': 'Ciudad de Mexico',
+  'cdmx': 'Ciudad de Mexico',
+  'mexico city': 'Ciudad de Mexico',
+  'durango': 'Durango',
+  'estado de mexico': 'Estado de Mexico',
+  'edo de mexico': 'Estado de Mexico',
+  'mexico': 'Estado de Mexico',
+  'guanajuato': 'Guanajuato',
+  'guerrero': 'Guerrero',
+  'hidalgo': 'Hidalgo',
+  'jalisco': 'Jalisco',
+  'michoacan': 'Michoacan',
+  'michoacan de ocampo': 'Michoacan',
+  'morelos': 'Morelos',
+  'nayarit': 'Nayarit',
+  'nuevo leon': 'Nuevo Leon',
+  'oaxaca': 'Oaxaca',
+  'puebla': 'Puebla',
+  'queretaro': 'Queretaro',
+  'quintana roo': 'Quintana Roo',
+  'san luis potosi': 'San Luis Potosi',
+  'sinaloa': 'Sinaloa',
+  'sonora': 'Sonora',
+  'tabasco': 'Tabasco',
+  'tamaulipas': 'Tamaulipas',
+  'tlaxcala': 'Tlaxcala',
+  'veracruz': 'Veracruz',
+  'veracruz de ignacio de la llave': 'Veracruz',
+  'yucatan': 'Yucatan',
+  'zacatecas': 'Zacatecas',
+};
+
+const normalizeStateName = (stateName: string | null | undefined) => {
+  const normalized = (stateName ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  return STATE_ALIASES[normalized] ?? '';
+};
+
+const getStateFillColor = (count: number, maxCount: number) => {
+  if (count === 0 || maxCount === 0) return '#ecfeff';
+  const intensity = count / maxCount;
+  if (intensity >= 0.75) return '#0f766e';
+  if (intensity >= 0.5) return '#14b8a6';
+  if (intensity >= 0.25) return '#5eead4';
+  return '#99f6e4';
+};
+
+const typedMexicoMap = mexicoMap as unknown as MexicoMapData;
+
 export function OrganizationDashboard() {
   const [organizationId, setOrganizationId] = useState<string>('');
   const [organizationName, setOrganizationName] = useState('Organización');
@@ -87,6 +174,9 @@ export function OrganizationDashboard() {
   const [announcements, setAnnouncements] = useState<DashboardAnnouncement[]>([]);
   const [amlAlerts, setAmlAlerts] = useState<DashboardAlert[]>([]);
   const [donations, setDonations] = useState<DashboardDonation[]>([]);
+  const [donors, setDonors] = useState<DashboardDonor[]>([]);
+  const [directions, setDirections] = useState<DashboardDirection[]>([]);
+  const [hoveredState, setHoveredState] = useState<{ name: string; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState<string | null>(null);
 
@@ -148,7 +238,7 @@ export function OrganizationDashboard() {
             .limit(20),
           supabase
             .from('donaciones')
-            .select('id_donacion, created_at, cantidad')
+            .select('id_donacion, id_donante, created_at, cantidad')
             .eq('id_osc', organizationId)
             .order('created_at', { ascending: false }),
         ]);
@@ -161,6 +251,44 @@ export function OrganizationDashboard() {
 
         if (!isMounted) return;
 
+        const donationRows = (donationsResponse.data ?? []) as DashboardDonation[];
+        const donorIds = Array.from(new Set(
+          donationRows
+            .map((donation) => donation.id_donante)
+            .filter((id): id is string => Boolean(id)),
+        ));
+
+        let donorRows: DashboardDonor[] = [];
+        let directionRows: DashboardDirection[] = [];
+
+        if (donorIds.length > 0) {
+          const donorsResponse = await supabase
+            .from('donantes')
+            .select('id_donante, id_direccion')
+            .in('id_donante', donorIds);
+
+          if (donorsResponse.error) throw donorsResponse.error;
+
+          donorRows = (donorsResponse.data ?? []) as DashboardDonor[];
+
+          const directionIds = Array.from(new Set(
+            donorRows
+              .map((donor) => donor.id_direccion)
+              .filter((id): id is string => Boolean(id)),
+          ));
+
+          if (directionIds.length > 0) {
+            const directionsResponse = await supabase
+              .from('direccion')
+              .select('id_direccion, entidad_federativa')
+              .in('id_direccion', directionIds);
+
+            if (directionsResponse.error) throw directionsResponse.error;
+
+            directionRows = (directionsResponse.data ?? []) as DashboardDirection[];
+          }
+        }
+
         const oscData = (oscResponse.data as OscProfile | null) ?? null;
 
         setOrganizationProfile(oscData);
@@ -168,7 +296,9 @@ export function OrganizationDashboard() {
         setDocuments((documentsResponse.data ?? []) as DashboardDocument[]);
         setAnnouncements((announcementsResponse.data ?? []) as DashboardAnnouncement[]);
         setAmlAlerts((amlAlertsResponse.data ?? []) as DashboardAlert[]);
-        setDonations((donationsResponse.data ?? []) as DashboardDonation[]);
+        setDonations(donationRows);
+        setDonors(donorRows);
+        setDirections(directionRows);
       } catch (error) {
         if (!isMounted) return;
         const message = error instanceof Error ? error.message : 'No fue posible cargar el dashboard.';
@@ -211,6 +341,52 @@ export function OrganizationDashboard() {
 
   const unreadAnnouncementsCount = useMemo(() => announcements
     .filter((announcement) => (announcement.estado ?? '').trim().toLowerCase() !== 'leido').length, [announcements]);
+
+  const donorsById = useMemo(() => donors.reduce<Record<string, DashboardDonor>>((accumulator, donor) => {
+    accumulator[donor.id_donante] = donor;
+    return accumulator;
+  }, {}), [donors]);
+
+  const directionsById = useMemo(() => directions.reduce<Record<string, string>>((accumulator, direction) => {
+    accumulator[direction.id_direccion] = direction.entidad_federativa ?? '';
+    return accumulator;
+  }, {}), [directions]);
+
+  const uniqueDonorIds = useMemo(() => Array.from(new Set(
+    donations
+      .map((donation) => donation.id_donante)
+      .filter((id): id is string => Boolean(id)),
+  )), [donations]);
+
+  const donorsByState = useMemo(() => uniqueDonorIds.reduce<Record<string, number>>((accumulator, donorId) => {
+    const donor = donorsById[donorId];
+    if (!donor?.id_direccion) return accumulator;
+
+    const stateName = directionsById[donor.id_direccion];
+    const normalizedState = normalizeStateName(stateName);
+    if (!normalizedState) return accumulator;
+
+    accumulator[normalizedState] = (accumulator[normalizedState] ?? 0) + 1;
+    return accumulator;
+  }, {}), [uniqueDonorIds, donorsById, directionsById]);
+
+  const donorMapStateData = useMemo(() => typedMexicoMap.locations.map((location) => {
+    const normalizedLocation = normalizeStateName(location.name);
+    return {
+      ...location,
+      canonicalName: normalizedLocation || location.name,
+      total: donorsByState[normalizedLocation] ?? 0,
+    };
+  }), [donorsByState]);
+
+  const maxDonorsPerState = useMemo(() => donorMapStateData.reduce((maxValue, stateEntry) => {
+    return Math.max(maxValue, stateEntry.total);
+  }, 0), [donorMapStateData]);
+
+  const topStatesByDonors = useMemo(() => Object.entries(donorsByState)
+    .map(([state, total]) => ({ state, total }))
+    .sort((first, second) => second.total - first.total)
+    .slice(0, 8), [donorsByState]);
 
   const documentsStatusChartData = useMemo(() => {
     const totalRejected = documents.filter((document) => normalizeStatus(document.estado) === 'rejected').length;
@@ -586,6 +762,76 @@ export function OrganizationDashboard() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Concentracion de Donantes por Estado</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Mapa de Mexico con intensidad por numero de donantes unicos de tu organizacion por entidad federativa.
+          </p>
+
+          <div className="relative rounded-lg border border-teal-100 bg-gradient-to-b from-white to-teal-50 p-3">
+            {hoveredState ? (
+              <div className="absolute right-3 top-3 rounded-lg bg-white/95 border border-gray-200 px-3 py-2 text-xs shadow-sm">
+                <p className="font-semibold text-gray-900">{hoveredState.name}</p>
+                <p className="text-gray-600">{hoveredState.total} donantes</p>
+              </div>
+            ) : null}
+
+            <svg viewBox={typedMexicoMap.viewBox} className="w-full h-auto" role="img" aria-label="Mapa de concentracion de donantes en Mexico">
+              {donorMapStateData.map((stateEntry) => (
+                <path
+                  key={stateEntry.id}
+                  d={stateEntry.path}
+                  fill={getStateFillColor(stateEntry.total, maxDonorsPerState)}
+                  stroke="#0f766e"
+                  strokeWidth={0.8}
+                  className="transition-colors duration-200 hover:fill-teal-700"
+                  onMouseEnter={() => setHoveredState({ name: stateEntry.canonicalName, total: stateEntry.total })}
+                  onMouseLeave={() => setHoveredState(null)}
+                />
+              ))}
+            </svg>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-600">
+            <span className="font-medium text-gray-700">Intensidad:</span>
+            <span className="inline-flex items-center gap-1"><span className="w-4 h-4 rounded bg-cyan-50 border border-cyan-200" />0</span>
+            <span className="inline-flex items-center gap-1"><span className="w-4 h-4 rounded bg-teal-200 border border-teal-300" />Baja</span>
+            <span className="inline-flex items-center gap-1"><span className="w-4 h-4 rounded bg-teal-400 border border-teal-500" />Media</span>
+            <span className="inline-flex items-center gap-1"><span className="w-4 h-4 rounded bg-teal-700 border border-teal-800" />Alta</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Estados con Mayor Concentracion</h2>
+          <p className="text-sm text-gray-600 mb-4">Top de entidades con mas donantes unicos de tu organizacion.</p>
+
+          <div className="space-y-3">
+            {topStatesByDonors.map((stateItem, index) => {
+              const width = maxDonorsPerState > 0
+                ? `${Math.max(8, Math.round((stateItem.total / maxDonorsPerState) * 100))}%`
+                : '8%';
+
+              return (
+                <div key={stateItem.state} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <p className="text-gray-700 font-medium">{index + 1}. {stateItem.state}</p>
+                    <p className="text-gray-900 font-semibold">{stateItem.total}</p>
+                  </div>
+                  <div className="h-2 rounded-full bg-gray-100">
+                    <div className="h-2 rounded-full bg-teal-500" style={{ width }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {topStatesByDonors.length === 0 && (
+            <p className="text-sm text-gray-500">No hay direcciones de donantes suficientes para calcular concentracion.</p>
+          )}
         </div>
       </div>
 

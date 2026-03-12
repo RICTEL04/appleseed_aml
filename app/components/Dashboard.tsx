@@ -10,13 +10,20 @@ import { Building2, AlertTriangle, CheckCircle2, TrendingUp, Loader2, ShieldAler
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase';
 import { useWorker } from '@/app/hooks/useWorker';
+import mexicoMap from '@svg-maps/mexico';
 
 interface DashboardOrganization {
   id_osc: string;
+  id_direccion: string | null;
   nombre_organizacion: string | null;
   estado_verificacion: string | null;
   riesgo: string | null;
   created_at: string;
+}
+
+interface DashboardDirection {
+  id_direccion: string;
+  entidad_federativa: string | null;
 }
 
 interface DashboardDocument {
@@ -61,6 +68,17 @@ interface ImmediateAction {
   route: string;
 }
 
+interface MexicoMapLocation {
+  id: string;
+  name: string;
+  path: string;
+}
+
+interface MexicoMapData {
+  viewBox: string;
+  locations: MexicoMapLocation[];
+}
+
 const normalizeOrgStatus = (status: string | null) => {
   const normalized = (status ?? '').trim().toLowerCase();
   if (normalized === 'verificada') return 'Verificada';
@@ -101,16 +119,82 @@ const PRIORITY_ORDER: Record<ImmediateAction['priority'], number> = {
   Baja: 2,
 };
 
+const STATE_ALIASES: Record<string, string> = {
+  'aguascalientes': 'Aguascalientes',
+  'baja california': 'Baja California',
+  'baja california sur': 'Baja California Sur',
+  'campeche': 'Campeche',
+  'coahuila': 'Coahuila',
+  'coahuila de zaragoza': 'Coahuila',
+  'colima': 'Colima',
+  'chiapas': 'Chiapas',
+  'chihuahua': 'Chihuahua',
+  'ciudad de mexico': 'Ciudad de Mexico',
+  'distrito federal': 'Ciudad de Mexico',
+  'cdmx': 'Ciudad de Mexico',
+  'mexico city': 'Ciudad de Mexico',
+  'durango': 'Durango',
+  'estado de mexico': 'Estado de Mexico',
+  'edo de mexico': 'Estado de Mexico',
+  'mexico': 'Estado de Mexico',
+  'guanajuato': 'Guanajuato',
+  'guerrero': 'Guerrero',
+  'hidalgo': 'Hidalgo',
+  'jalisco': 'Jalisco',
+  'michoacan': 'Michoacan',
+  'michoacan de ocampo': 'Michoacan',
+  'morelos': 'Morelos',
+  'nayarit': 'Nayarit',
+  'nuevo leon': 'Nuevo Leon',
+  'oaxaca': 'Oaxaca',
+  'puebla': 'Puebla',
+  'queretaro': 'Queretaro',
+  'quintana roo': 'Quintana Roo',
+  'san luis potosi': 'San Luis Potosi',
+  'sinaloa': 'Sinaloa',
+  'sonora': 'Sonora',
+  'tabasco': 'Tabasco',
+  'tamaulipas': 'Tamaulipas',
+  'tlaxcala': 'Tlaxcala',
+  'veracruz': 'Veracruz',
+  'veracruz de ignacio de la llave': 'Veracruz',
+  'yucatan': 'Yucatan',
+  'zacatecas': 'Zacatecas',
+};
+
+const normalizeStateName = (stateName: string | null | undefined) => {
+  const normalized = (stateName ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  return STATE_ALIASES[normalized] ?? '';
+};
+
+const getStateFillColor = (count: number, maxCount: number) => {
+  if (count === 0 || maxCount === 0) return '#ecfeff';
+  const intensity = count / maxCount;
+  if (intensity >= 0.75) return '#0f766e';
+  if (intensity >= 0.5) return '#14b8a6';
+  if (intensity >= 0.25) return '#5eead4';
+  return '#99f6e4';
+};
+
+const typedMexicoMap = mexicoMap as unknown as MexicoMapData;
+
 export function Dashboard() {
   const { worker } = useWorker();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [organizations, setOrganizations] = useState<DashboardOrganization[]>([]);
+  const [directions, setDirections] = useState<DashboardDirection[]>([]);
   const [documents, setDocuments] = useState<DashboardDocument[]>([]);
   const [amlAlerts, setAmlAlerts] = useState<DashboardAmlAlert[]>([]);
   const [donations, setDonations] = useState<DashboardDonation[]>([]);
   const [announcements, setAnnouncements] = useState<DashboardAnnouncement[]>([]);
+  const [hoveredState, setHoveredState] = useState<{ name: string; total: number } | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -129,11 +213,14 @@ export function Dashboard() {
 
       try {
         const supabase = getSupabaseClient();
-        const [orgResponse, docsResponse, alertsResponse, donationsResponse, announcementsResponse] = await Promise.all([
+        const [orgResponse, directionsResponse, docsResponse, alertsResponse, donationsResponse, announcementsResponse] = await Promise.all([
           supabase
             .from('osc')
-            .select('id_osc, nombre_organizacion, estado_verificacion, riesgo, created_at')
+            .select('id_osc, id_direccion, nombre_organizacion, estado_verificacion, riesgo, created_at')
             .order('created_at', { ascending: false }),
+          supabase
+            .from('direccion')
+            .select('id_direccion, entidad_federativa'),
           supabase
             .from('documentos')
             .select('id, id_osc, estado, vencimiento, nombre_documento, created_at, id_trabajador')
@@ -154,6 +241,7 @@ export function Dashboard() {
         ]);
 
         if (orgResponse.error) throw orgResponse.error;
+        if (directionsResponse.error) throw directionsResponse.error;
         if (docsResponse.error) throw docsResponse.error;
         if (alertsResponse.error) throw alertsResponse.error;
         if (donationsResponse.error) throw donationsResponse.error;
@@ -162,6 +250,7 @@ export function Dashboard() {
         if (!isMounted) return;
 
         setOrganizations((orgResponse.data ?? []) as DashboardOrganization[]);
+        setDirections((directionsResponse.data ?? []) as DashboardDirection[]);
         setDocuments((docsResponse.data ?? []) as DashboardDocument[]);
         setAmlAlerts((alertsResponse.data ?? []) as DashboardAmlAlert[]);
         setDonations((donationsResponse.data ?? []) as DashboardDonation[]);
@@ -193,6 +282,40 @@ export function Dashboard() {
     acc[org.id_osc] = normalizeRisk(org.riesgo);
     return acc;
   }, {}), [organizations]);
+
+  const directionsById = useMemo(() => directions.reduce<Record<string, string>>((acc, direction) => {
+    acc[direction.id_direccion] = direction.entidad_federativa ?? '';
+    return acc;
+  }, {}), [directions]);
+
+  const organizationsByState = useMemo(() => organizations.reduce<Record<string, number>>((acc, organization) => {
+    if (!organization.id_direccion) return acc;
+    const stateName = directionsById[organization.id_direccion];
+    const normalizedState = normalizeStateName(stateName);
+
+    if (!normalizedState) return acc;
+
+    acc[normalizedState] = (acc[normalizedState] ?? 0) + 1;
+    return acc;
+  }, {}), [organizations, directionsById]);
+
+  const mapStateData = useMemo(() => typedMexicoMap.locations.map((location) => {
+    const normalizedLocation = normalizeStateName(location.name);
+    return {
+      ...location,
+      canonicalName: normalizedLocation || location.name,
+      total: organizationsByState[normalizedLocation] ?? 0,
+    };
+  }), [organizationsByState]);
+
+  const maxOrganizationsPerState = useMemo(() => mapStateData.reduce((maxValue, stateEntry) => {
+    return Math.max(maxValue, stateEntry.total);
+  }, 0), [mapStateData]);
+
+  const topStatesByOrganizations = useMemo(() => Object.entries(organizationsByState)
+    .map(([state, total]) => ({ state, total }))
+    .sort((first, second) => second.total - first.total)
+    .slice(0, 8), [organizationsByState]);
 
   const verificationMetrics = useMemo(() => {
     const total = organizations.length;
@@ -600,6 +723,76 @@ export function Dashboard() {
           </ResponsiveContainer>
           {donationsByRiskData.length === 0 && (
             <p className="text-xs text-gray-500 mt-2">Aún no hay donaciones vinculadas a OSC para graficar.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Concentracion de OSC por Estado</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Mapa de Mexico con intensidad por numero de organizaciones registradas por entidad federativa.
+          </p>
+
+          <div className="relative rounded-lg border border-teal-100 bg-gradient-to-b from-white to-teal-50 p-3">
+            {hoveredState ? (
+              <div className="absolute right-3 top-3 rounded-lg bg-white/95 border border-gray-200 px-3 py-2 text-xs shadow-sm">
+                <p className="font-semibold text-gray-900">{hoveredState.name}</p>
+                <p className="text-gray-600">{hoveredState.total} OSC</p>
+              </div>
+            ) : null}
+
+            <svg viewBox={typedMexicoMap.viewBox} className="w-full h-auto" role="img" aria-label="Mapa de concentracion de organizaciones en Mexico">
+              {mapStateData.map((stateEntry) => (
+                <path
+                  key={stateEntry.id}
+                  d={stateEntry.path}
+                  fill={getStateFillColor(stateEntry.total, maxOrganizationsPerState)}
+                  stroke="#0f766e"
+                  strokeWidth={0.8}
+                  className="transition-colors duration-200 hover:fill-teal-700"
+                  onMouseEnter={() => setHoveredState({ name: stateEntry.canonicalName, total: stateEntry.total })}
+                  onMouseLeave={() => setHoveredState(null)}
+                />
+              ))}
+            </svg>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-600">
+            <span className="font-medium text-gray-700">Intensidad:</span>
+            <span className="inline-flex items-center gap-1"><span className="w-4 h-4 rounded bg-cyan-50 border border-cyan-200" />0</span>
+            <span className="inline-flex items-center gap-1"><span className="w-4 h-4 rounded bg-teal-200 border border-teal-300" />Baja</span>
+            <span className="inline-flex items-center gap-1"><span className="w-4 h-4 rounded bg-teal-400 border border-teal-500" />Media</span>
+            <span className="inline-flex items-center gap-1"><span className="w-4 h-4 rounded bg-teal-700 border border-teal-800" />Alta</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Estados con Mayor Concentracion</h2>
+          <p className="text-sm text-gray-600 mb-4">Top de entidades federativas con mas OSC registradas.</p>
+
+          <div className="space-y-3">
+            {topStatesByOrganizations.map((stateItem, index) => {
+              const width = maxOrganizationsPerState > 0
+                ? `${Math.max(8, Math.round((stateItem.total / maxOrganizationsPerState) * 100))}%`
+                : '8%';
+
+              return (
+                <div key={stateItem.state} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <p className="text-gray-700 font-medium">{index + 1}. {stateItem.state}</p>
+                    <p className="text-gray-900 font-semibold">{stateItem.total}</p>
+                  </div>
+                  <div className="h-2 rounded-full bg-gray-100">
+                    <div className="h-2 rounded-full bg-teal-500" style={{ width }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {topStatesByOrganizations.length === 0 && (
+            <p className="text-sm text-gray-500">No hay ubicaciones de estado suficientes para calcular concentracion.</p>
           )}
         </div>
       </div>
